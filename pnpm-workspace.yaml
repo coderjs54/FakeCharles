@@ -1,5 +1,7 @@
-# 这些依赖的 build script 对当前应用不是必需的，显式跳过后 pnpm install 才能正常结束
+# 显式声明依赖的 build script 策略，保证全新安装和 CI 环境可重复
 allowBuilds:
+  electron: true
+  esbuild: true
   '@parcel/watcher': false
   electron-winstaller: false
 

@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows build, test and package
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.LOCALAPPDATA }}/electron/Cache
+            ${{ env.LOCALAPPDATA }}/electron-builder/Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Electron 的二进制有时会在首次调用时才下载，先显式预热，避免自测阶段超时
+      - name: Prepare Electron
+        run: pnpm exec electron --version
+
+      - name: Typecheck and build
+        run: pnpm build
+
+      - name: Self-test
+        run: pnpm exec electron --no-sandbox . --selftest
+
+      - name: Upload self-test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-report
+          path: |
+            .selftest/result.json
+            .selftest/screenshot-*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Package Windows installer
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: pnpm exec electron-builder --win
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: FakeCharles-Windows-x64
+          path: |
+            release/FakeCharles-Setup-*.exe
+            release/FakeCharles-Setup-*.exe.blockmap
+          if-no-files-found: error
+          retention-days: 14
