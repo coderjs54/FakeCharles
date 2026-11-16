@@ -1,0 +1,528 @@
+<script setup lang="ts">
+import { computed, reactive, ref } from 'vue'
+import { useSession } from '../stores/useSession'
+import { useToast } from '../stores/useToast'
+import { errorMessage } from '../utils/error'
+import AppIcon from './AppIcon.vue'
+import AppModal from './AppModal.vue'
+
+const emit = defineEmits<{ (event: 'close'): void }>()
+
+const { settings, proxyAddress, proxyStatus, systemProxyState, updateSettings } = useSession()
+const { push } = useToast()
+
+const form = reactive({
+  proxyPort: settings.value?.proxyPort ?? 8888,
+  autoStartProxy: settings.value?.autoStartProxy ?? true,
+  allowLan: settings.value?.allowLan ?? false,
+  autoSystemProxy: settings.value?.autoSystemProxy ?? true,
+  recordTunnels: settings.value?.recordTunnels ?? true,
+  bodyLimitMb: Math.round(((settings.value?.maxBodySize ?? 5 * 1024 * 1024) / 1024 / 1024) * 10) / 10,
+  maxEntries: settings.value?.maxEntries ?? 3000
+})
+const errorText = ref('')
+const saving = ref(false)
+
+const systemProxyStatusText = computed(() => {
+  const state = systemProxyState.value
+  if (!state.supported) return '当前系统不支持自动配置，请在浏览器或系统中手动设置 HTTP 代理'
+  if (state.error) return state.error
+  if (state.active) return `已接管系统代理：${state.server}`
+  if (form.autoSystemProxy) return '代理启动后会自动接管系统代理'
+  return '未启用自动系统代理，需要手动配置浏览器代理'
+})
+
+async function copyAddress(): Promise<void> {
+  try {
+    await window.api.copyText(proxyAddress.value)
+    push(`已复制代理地址 ${proxyAddress.value}`)
+  } catch {
+    push('复制失败', 'error')
+  }
+}
+
+async function save(): Promise<void> {
+  errorText.value = ''
+  const port = Number(form.proxyPort)
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+    errorText.value = '代理端口必须是 1024 - 65535 之间的整数'
+    return
+  }
+  const bodyLimitMb = Number(form.bodyLimitMb)
+  if (!Number.isFinite(bodyLimitMb) || bodyLimitMb < 0.0625 || bodyLimitMb > 50) {
+    errorText.value = 'Body 上限需在 0.0625 MB - 50 MB 之间'
+    return
+  }
+  const maxEntries = Number(form.maxEntries)
+  if (!Number.isInteger(maxEntries) || maxEntries < 100 || maxEntries > 20000) {
+    errorText.value = '会话条目数需在 100 - 20000 之间'
+    return
+  }
+
+  saving.value = true
+  try {
+    await updateSettings({
+      proxyPort: port,
+      autoStartProxy: form.autoStartProxy,
+      allowLan: form.allowLan,
+      autoSystemProxy: form.autoSystemProxy,
+      recordTunnels: form.recordTunnels,
+      maxBodySize: Math.round(bodyLimitMb * 1024 * 1024),
+      maxEntries
+    })
+    if (proxyStatus.value.error) {
+      errorText.value = proxyStatus.value.error
+      push(proxyStatus.value.error, 'error')
+      return
+    }
+    push('设置已保存', 'success')
+    emit('close')
+  } catch (error) {
+    errorText.value = errorMessage(error)
+  } finally {
+    saving.value = false
+  }
+}
+</script>
+
+<template>
+  <AppModal title="代理设置" width="580px" @close="emit('close')">
+    <div class="fc-settings">
+      <section class="fc-settings-section">
+        <h3 class="fc-settings-heading">代理服务</h3>
+
+        <div class="fc-settings-row">
+          <label class="fc-field">
+            <span class="fc-field-label">代理端口</span>
+            <input v-model.number="form.proxyPort" class="fc-input fc-input--port" type="number" min="1024" max="65535" />
+            <span class="fc-field-hint">默认 8888，修改后会自动重启代理</span>
+          </label>
+          <div class="fc-address-preview">
+            <span class="fc-field-label">当前代理地址</span>
+            <div class="fc-address-value">
+              <code>{{ proxyAddress }}</code>
+              <button class="fc-address-copy" type="button" title="复制代理地址" @click="copyAddress">
+                <AppIcon name="copy" :size="12" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <label class="fc-switch-row">
+          <span class="fc-switch-text">
+            <span class="fc-switch-title">允许局域网设备连接</span>
+            <span class="fc-switch-desc">开启后绑定 0.0.0.0，手机或其他设备可通过本机 IP 连接代理</span>
+          </span>
+          <span class="fc-switch">
+            <input v-model="form.allowLan" class="fc-switch-input" type="checkbox" />
+            <span class="fc-switch-track"><span class="fc-switch-thumb" /></span>
+          </span>
+        </label>
+
+        <label class="fc-switch-row">
+          <span class="fc-switch-text">
+            <span class="fc-switch-title">启动时自动开启代理</span>
+            <span class="fc-switch-desc">应用启动后立即监听代理端口</span>
+          </span>
+          <span class="fc-switch">
+            <input v-model="form.autoStartProxy" class="fc-switch-input" type="checkbox" />
+            <span class="fc-switch-track"><span class="fc-switch-thumb" /></span>
+          </span>
+        </label>
+
+        <label class="fc-switch-row">
+          <span class="fc-switch-text">
+            <span class="fc-switch-title">自动设置 Windows 系统代理</span>
+            <span class="fc-switch-desc">
+              启动代理时自动接管系统代理，停止代理或退出应用时恢复原设置；浏览器和其他遵循系统代理的程序无需手动配置（仅 Windows）
+            </span>
+          </span>
+          <span class="fc-switch">
+            <input v-model="form.autoSystemProxy" class="fc-switch-input" type="checkbox" />
+            <span class="fc-switch-track"><span class="fc-switch-thumb" /></span>
+          </span>
+        </label>
+
+        <div
+          class="fc-system-proxy-status"
+          :class="{
+            'fc-system-proxy-status--active': systemProxyState.active,
+            'fc-system-proxy-status--error': Boolean(systemProxyState.error),
+            'fc-system-proxy-status--disabled': !form.autoSystemProxy
+          }"
+        >
+          <span class="fc-system-proxy-dot" />
+          <span class="fc-system-proxy-text">{{ systemProxyStatusText }}</span>
+        </div>
+      </section>
+
+      <section class="fc-settings-section">
+        <h3 class="fc-settings-heading">捕获行为</h3>
+
+        <label class="fc-switch-row">
+          <span class="fc-switch-text">
+            <span class="fc-switch-title">记录 HTTPS 隧道</span>
+            <span class="fc-switch-desc">为 CONNECT 连接生成一条提示记录，但不会解密 HTTPS 内容</span>
+          </span>
+          <span class="fc-switch">
+            <input v-model="form.recordTunnels" class="fc-switch-input" type="checkbox" />
+            <span class="fc-switch-track"><span class="fc-switch-thumb" /></span>
+          </span>
+        </label>
+
+        <div class="fc-settings-grid">
+          <label class="fc-field">
+            <span class="fc-field-label">单个 Body 上限（MB）</span>
+            <input v-model.number="form.bodyLimitMb" class="fc-input" type="number" min="0.0625" max="50" step="0.5" />
+            <span class="fc-field-hint">超出部分会被截断，默认 5 MB</span>
+          </label>
+          <label class="fc-field">
+            <span class="fc-field-label">会话最大条目数</span>
+            <input v-model.number="form.maxEntries" class="fc-input" type="number" min="100" max="20000" step="100" />
+            <span class="fc-field-hint">超出后自动丢弃最早的请求</span>
+          </label>
+        </div>
+      </section>
+
+      <div class="fc-settings-tip">
+        <AppIcon name="info" :size="14" />
+        <span>
+          在浏览器 / 系统中把 <strong>HTTP 代理</strong> 指向
+          <code>{{ proxyAddress }}</code>
+          即可抓取 HTTP 请求；HTTPS 仅以隧道形式透传，不解密内容。
+        </span>
+      </div>
+
+      <div v-if="errorText" class="fc-settings-error">{{ errorText }}</div>
+    </div>
+
+    <template #footer>
+      <button class="fc-button" type="button" :disabled="saving" @click="emit('close')">取消</button>
+      <button class="fc-button fc-button--primary" type="button" :disabled="saving" @click="save">
+        {{ saving ? '保存中…' : '保存并应用' }}
+      </button>
+    </template>
+  </AppModal>
+</template>
+
+<style scoped lang="scss">
+.fc-settings {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-lg;
+}
+
+.fc-settings-section {
+  padding-bottom: $spacing-md;
+  border-bottom: 1px solid $color-divider;
+}
+
+.fc-settings-section:last-of-type {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.fc-settings-heading {
+  margin-bottom: $spacing-md;
+  color: $color-text-tertiary;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.fc-settings-row {
+  display: flex;
+  gap: $spacing-xl;
+  align-items: flex-start;
+}
+
+.fc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.fc-field-label {
+  color: $color-text-secondary;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.fc-field-hint {
+  color: $color-text-tertiary;
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+.fc-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid $color-border;
+  border-radius: $radius-sm;
+  background: $color-surface;
+  color: $color-text;
+  font-family: $font-mono;
+  font-size: 12px;
+  transition: border-color $transition-fast, box-shadow $transition-fast;
+}
+
+.fc-input:focus {
+  border-color: rgba(37, 99, 235, 0.6);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.fc-input--port {
+  max-width: 160px;
+}
+
+.fc-address-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.fc-address-value {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  height: 32px;
+  padding: 0 6px 0 9px;
+  border: 1px solid $color-border;
+  border-radius: $radius-sm;
+  background: $color-surface-muted;
+}
+
+.fc-address-value code {
+  flex: 1;
+  overflow: hidden;
+  color: $color-text-secondary;
+  font-family: $font-mono;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-address-copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: $radius-xs;
+  color: $color-text-tertiary;
+}
+
+.fc-address-copy:hover {
+  background: $color-hover;
+  color: $color-text;
+}
+
+.fc-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-xl;
+  padding: 8px 0;
+  cursor: pointer;
+}
+
+.fc-switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fc-switch-title {
+  color: $color-text;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fc-switch-desc {
+  color: $color-text-tertiary;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.fc-switch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.fc-switch-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.fc-switch-track {
+  position: relative;
+  display: block;
+  width: 32px;
+  height: 18px;
+  border-radius: $radius-pill;
+  background: #d5dbe4;
+  transition: background $transition-fast;
+}
+
+.fc-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.2);
+  transition: transform $transition-fast;
+}
+
+.fc-switch-input:checked + .fc-switch-track {
+  background: $color-primary;
+}
+
+.fc-switch-input:checked + .fc-switch-track .fc-switch-thumb {
+  transform: translateX(14px);
+}
+
+.fc-switch-input:focus-visible + .fc-switch-track {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.fc-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $spacing-lg;
+  margin-top: $spacing-sm;
+}
+
+.fc-system-proxy-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 6px 9px;
+  border: 1px solid $color-border;
+  border-radius: $radius-sm;
+  background: $color-surface-muted;
+  color: $color-text-tertiary;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.fc-system-proxy-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #b8c0cc;
+  flex: none;
+}
+
+.fc-system-proxy-status--active {
+  border-color: rgba(17, 126, 90, 0.2);
+  background: $color-success-soft;
+  color: $color-success;
+}
+
+.fc-system-proxy-status--active .fc-system-proxy-dot {
+  background: $color-success;
+  box-shadow: 0 0 0 2px rgba(17, 126, 90, 0.12);
+}
+
+.fc-system-proxy-status--error {
+  border-color: rgba(192, 43, 43, 0.2);
+  background: $color-danger-soft;
+  color: $color-danger;
+}
+
+.fc-system-proxy-status--error .fc-system-proxy-dot {
+  background: $color-danger;
+}
+
+.fc-system-proxy-status--disabled {
+  opacity: 0.8;
+}
+
+.fc-system-proxy-text {
+  overflow-wrap: anywhere;
+}
+
+.fc-settings-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: $spacing-md;
+  padding: 9px 11px;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  border-radius: $radius-sm;
+  background: $color-primary-soft;
+  color: $color-text-secondary;
+  font-size: 10.5px;
+  line-height: 1.65;
+}
+
+.fc-settings-tip code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(37, 99, 235, 0.08);
+  color: $color-primary;
+  font-family: $font-mono;
+  font-size: 9.5px;
+}
+
+.fc-settings-tip :deep(.fc-icon) {
+  margin-top: 2px;
+  color: $color-primary;
+}
+
+.fc-settings-error {
+  padding: 8px 10px;
+  border: 1px solid rgba(192, 43, 43, 0.2);
+  border-radius: $radius-sm;
+  background: $color-danger-soft;
+  color: $color-danger;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.fc-button {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid $color-border;
+  border-radius: $radius-sm;
+  background: $color-surface;
+  color: $color-text-secondary;
+  font-size: 11.5px;
+  font-weight: 500;
+  transition: border-color $transition-fast, background $transition-fast;
+}
+
+.fc-button:hover {
+  border-color: $color-border-strong;
+  background: $color-surface-muted;
+}
+
+.fc-button--primary {
+  border-color: $color-primary;
+  background: $color-primary;
+  color: #fff;
+}
+
+.fc-button--primary:hover {
+  border-color: $color-primary-hover;
+  background: $color-primary-hover;
+}
+
+.fc-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+</style>
