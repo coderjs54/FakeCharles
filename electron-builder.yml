@@ -1,0 +1,43 @@
+appId: com.fakecharles.app
+productName: FakeCharles
+copyright: Copyright © 2026 FakeCharles
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - out/**/*
+  - package.json
+
+extraResources:
+  - from: resources
+    to: .
+    filter:
+      - icon.ico
+      - icon.png
+
+asar: true
+npmRebuild: false
+
+win:
+  icon: resources/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: FakeCharles
+  artifactName: ${productName}-Setup-${version}-${arch}.${ext}
+
+linux:
+  icon: resources/icon.png
+  category: Development
+  target:
+    - AppImage

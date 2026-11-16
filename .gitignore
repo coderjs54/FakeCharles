@@ -1,6 +1,7 @@
 node_modules/
 out/
 dist/
+release/
 .selftest/
 *.log
 .DS_Store

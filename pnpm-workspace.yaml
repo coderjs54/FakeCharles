@@ -1,0 +1,8 @@
+# 这些依赖的 build script 对当前应用不是必需的，显式跳过后 pnpm install 才能正常结束
+allowBuilds:
+  '@parcel/watcher': false
+  electron-winstaller: false
+
+# electron-builder 26.18.0 声明的 @electron/get 范围过宽，它实际使用了 3.1.0 才有的 API
+overrides:
+  app-builder-lib>@electron/get: 3.1.0

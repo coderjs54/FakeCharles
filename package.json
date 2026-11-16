@@ -11,12 +11,16 @@
     "start": "electron-vite preview",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
     "build": "pnpm typecheck && electron-vite build",
-    "selftest": "electron-vite build && electron . --selftest"
+    "selftest": "electron-vite build && electron . --selftest",
+    "dist": "pnpm build && electron-builder",
+    "dist:win": "pnpm build && electron-builder --win",
+    "dist:dir": "pnpm build && electron-builder --dir"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
     "@vitejs/plugin-vue": "^6.0.11",
     "electron": "^45.3.1",
+    "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
     "sass-embedded": "^1.108.2",
     "typescript": "^5.9.3",
