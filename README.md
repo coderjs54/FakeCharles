@@ -150,6 +150,7 @@ GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在以下场景触�
 
 - push 到 `main`
 - Pull Request
+- 推送 `v*` 标签
 - 手动触发
 
 CI 会在 `windows-latest` 上执行：
@@ -159,6 +160,23 @@ CI 会在 `windows-latest` 上执行：
 3. 运行 Electron 端到端自测
 4. 上传自测报告与截图
 5. 构建 Windows 安装包并上传 artifact
+
+### 发布新版本
+
+更新 `package.json` 中的版本号并提交后，推送同名标签：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+标签构建通过测试并成功生成安装包后，会自动创建 GitHub Release，并附上：
+
+```text
+FakeCharles-Setup-<version>-x64.exe
+```
+
+注意：标签名必须与 `package.json` 的 `version` 一致，否则 CI 会在构建前失败。普通的 `main` push 和 PR 只运行测试与构建，不会创建 Release。
 
 ## 项目结构
 
