@@ -50,6 +50,8 @@ function normalize(input: Partial<AppSettings>): AppSettings {
     autoStartProxy: Boolean(input.autoStartProxy),
     allowLan: Boolean(input.allowLan),
     autoSystemProxy: input.autoSystemProxy !== false,
+    decryptHttps: input.decryptHttps === true,
+    allowInsecureUpstream: input.allowInsecureUpstream === true,
     maxBodySize: Number.isFinite(bodySize) ? clamp(Math.round(bodySize), MIN_BODY_LIMIT, MAX_BODY_LIMIT) : DEFAULT_SETTINGS.maxBodySize,
     maxEntries: Number.isFinite(maxEntries) ? clamp(Math.round(maxEntries), MIN_ENTRIES, MAX_ENTRIES) : DEFAULT_SETTINGS.maxEntries,
     recordTunnels: input.recordTunnels !== false

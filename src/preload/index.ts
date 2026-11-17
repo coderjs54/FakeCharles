@@ -8,6 +8,7 @@ import {
   type ComposePayload,
   type EntryDetail,
   type EntryMeta,
+  type HttpsCaInfo,
   type ProxyStatus,
   type SystemProxyState
 } from '../shared/types'
@@ -36,6 +37,10 @@ const api: FakeCharlesApi = {
   getSettings: () => ipcRenderer.invoke(IPC.settingsGet) as Promise<AppSettings>,
   updateSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke(IPC.settingsUpdate, patch) as Promise<AppSettings>,
   getSystemProxy: () => ipcRenderer.invoke(IPC.systemProxyGet) as Promise<SystemProxyState>,
+  getHttpsCaInfo: () => ipcRenderer.invoke(IPC.httpsCaInfo) as Promise<HttpsCaInfo>,
+  ensureHttpsCa: () => ipcRenderer.invoke(IPC.httpsCaEnsure) as Promise<HttpsCaInfo>,
+  installHttpsCa: () => ipcRenderer.invoke(IPC.httpsCaInstall) as Promise<HttpsCaInfo>,
+  revealHttpsCa: () => ipcRenderer.invoke(IPC.httpsCaReveal) as Promise<HttpsCaInfo>,
   copyText: (text: string) => ipcRenderer.invoke(IPC.clipboardWrite, text) as Promise<void>,
   saveBody: (payload: { id: string; side: 'request' | 'response' }) => ipcRenderer.invoke(IPC.bodySave, payload),
   onEntry: (callback: (meta: EntryMeta) => void) => subscribe(IPC.eventEntry, callback),

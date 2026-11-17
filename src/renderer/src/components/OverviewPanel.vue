@@ -24,7 +24,6 @@ const tone = computed(() => statusTone(props.detail))
 const canRepeat = computed(
   () =>
     props.detail.state !== 'pending' &&
-    props.detail.protocol === 'http' &&
     props.detail.method !== 'CONNECT' &&
     !props.detail.tunnel
 )

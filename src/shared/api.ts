@@ -4,6 +4,7 @@ import type {
   ComposePayload,
   EntryDetail,
   EntryMeta,
+  HttpsCaInfo,
   ProxyStatus,
   SystemProxyState
 } from './types'
@@ -36,6 +37,10 @@ export interface FakeCharlesApi {
   getSettings: () => Promise<AppSettings>
   updateSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>
   getSystemProxy: () => Promise<SystemProxyState>
+  getHttpsCaInfo: () => Promise<HttpsCaInfo>
+  ensureHttpsCa: () => Promise<HttpsCaInfo>
+  installHttpsCa: () => Promise<HttpsCaInfo>
+  revealHttpsCa: () => Promise<HttpsCaInfo>
   copyText: (text: string) => Promise<void>
   saveBody: (payload: { id: string; side: 'request' | 'response' }) => Promise<SaveBodyResult | null>
   onEntry: (callback: (meta: EntryMeta) => void) => () => void

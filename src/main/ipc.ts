@@ -1,4 +1,4 @@
-import { app, clipboard, dialog, ipcMain } from 'electron'
+import { app, clipboard, dialog, ipcMain, shell } from 'electron'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AppSettings, ComposePayload, EntryDetail } from '../shared/types'
@@ -56,6 +56,18 @@ export function registerIpc(ctx: MainContext): void {
 
   ipcMain.handle(IPC.systemProxyGet, () => ctx.systemProxy.getStatus())
 
+  ipcMain.handle(IPC.httpsCaInfo, () => ctx.proxy.getHttpsCaInfo())
+
+  ipcMain.handle(IPC.httpsCaEnsure, () => ctx.proxy.ensureHttpsCa())
+
+  ipcMain.handle(IPC.httpsCaInstall, () => ctx.proxy.installHttpsCa())
+
+  ipcMain.handle(IPC.httpsCaReveal, () => {
+    const info = ctx.proxy.getHttpsCaInfo()
+    if (info.certPath) shell.showItemInFolder(info.certPath)
+    return info
+  })
+
   ipcMain.handle(IPC.settingsUpdate, async (_event, patch: Partial<AppSettings>) => {
     const previous = ctx.settings.get()
     const next = ctx.settings.update(patch ?? {})
@@ -64,7 +76,9 @@ export function registerIpc(ctx: MainContext): void {
       port: next.proxyPort,
       allowLan: next.allowLan,
       maxBodySize: next.maxBodySize,
-      recordTunnels: next.recordTunnels
+      recordTunnels: next.recordTunnels,
+      decryptHttps: next.decryptHttps,
+      allowInsecureUpstream: next.allowInsecureUpstream
     })
     ctx.broadcast(IPC.eventSettings, next)
     const needRestart =

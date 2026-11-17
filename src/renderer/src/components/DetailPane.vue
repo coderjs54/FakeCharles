@@ -33,7 +33,6 @@ const canRepeat = computed(
   () =>
     Boolean(detail.value) &&
     detail.value!.state !== 'pending' &&
-    detail.value!.protocol === 'http' &&
     detail.value!.method !== 'CONNECT' &&
     !detail.value!.tunnel
 )
@@ -108,6 +107,10 @@ async function repeat(): Promise<void> {
             <AppIcon name="lock" :size="10" />
             HTTPS 隧道
           </span>
+          <span v-else-if="detail.decrypted" class="fc-detail-tag fc-detail-tag--decrypted">
+            <AppIcon name="lock" :size="10" />
+            HTTPS 解密
+          </span>
         </div>
       </header>
 
@@ -167,7 +170,7 @@ async function repeat(): Promise<void> {
           系统代理已自动接管，直接访问以 http:// 开头的页面即可。停止代理或退出应用会自动恢复原来的系统代理设置。
         </div>
         <div v-else class="fc-detail-proxy-hint">
-          将浏览器或系统的 HTTP 代理设置为上述地址。HTTPS 请求会以 CONNECT 隧道显示，但内容不会被解密。
+          将浏览器或系统的 HTTP 代理设置为上述地址。HTTPS 默认以 CONNECT 隧道显示；如需查看内容，请在设置中开启 HTTPS 解密。
         </div>
         <code class="fc-detail-curl">curl -x http://{{ proxyAddress }} http://example.com</code>
       </div>
@@ -333,6 +336,11 @@ async function repeat(): Promise<void> {
   font-family: $font-ui;
   font-size: 9px;
   font-weight: 600;
+}
+
+.fc-detail-tag--decrypted {
+  background: $color-success-soft;
+  color: $color-success;
 }
 
 .fc-detail-scroll {

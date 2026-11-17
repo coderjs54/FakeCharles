@@ -17,7 +17,7 @@ const proxyStatus = ref<ProxyStatus>({
 const settings = ref<AppSettings | null>(null)
 const systemProxyState = ref<SystemProxyState>({ supported: false, active: false, server: '' })
 const filter = ref('')
-// 是否在列表中显示 HTTPS 请求（当前实现下即 CONNECT 隧道记录）
+// 是否在列表中显示 HTTPS 请求（包括解密后的请求和未解密的 CONNECT 隧道）
 const showHttps = ref(true)
 const view = ref<'structure' | 'sequence'>('structure')
 const initialized = ref(false)
@@ -48,7 +48,7 @@ const stats = computed(() => ({
   errors: entries.value.filter((entry) => entry.state === 'error').length
 }))
 
-/** HTTPS 请求目前是 CONNECT 隧道记录，后续如果支持解密也可以复用该判断 */
+/** HTTPS 请求包含解密后的请求和未解密的 CONNECT 隧道 */
 function isHttpsRequest(entry: EntryMeta): boolean {
   return entry.protocol === 'https' || entry.tunnel || entry.method === 'CONNECT'
 }

@@ -66,7 +66,7 @@ const windowOffset = computed(() => startIndex.value * ROW_HEIGHT)
 const menuItems = computed<ContextMenuItem[]>(() => {
   const entry = menu.entry
   if (!entry) return []
-  const isTunnel = entry.tunnel || entry.method === 'CONNECT' || entry.protocol === 'https'
+  const isTunnel = entry.tunnel || entry.method === 'CONNECT'
   return [
     { id: 'repeat', label: '重放请求', icon: 'repeat', disabled: isTunnel || entry.state === 'pending' },
     { id: 'copy-url', label: '复制 URL', icon: 'copy' },
@@ -382,7 +382,7 @@ onBeforeUnmount(() => {
                     :class="{ 'fc-entry-icon--tunnel': row.entry.tunnel || row.entry.method === 'CONNECT' }"
                   >
                     <AppIcon
-                      :name="row.entry.tunnel || row.entry.method === 'CONNECT' ? 'lock' : 'file'"
+                      :name="row.entry.protocol === 'https' ? 'lock' : 'file'"
                       :size="12"
                     />
                   </span>

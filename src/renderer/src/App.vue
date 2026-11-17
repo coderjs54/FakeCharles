@@ -260,7 +260,7 @@ onBeforeUnmount(() => {
         系统代理未接管
       </span>
       <span class="fc-statusbar-spacer" />
-      <span class="fc-status-item fc-status-item--muted">仅抓取 HTTP · HTTPS 隧道透传</span>
+      <span class="fc-status-item fc-status-item--muted">HTTP 抓包 · HTTPS 可解密</span>
       <span class="fc-status-divider" />
       <span class="fc-status-item fc-status-item--muted">FakeCharles 1.0.0</span>
     </footer>

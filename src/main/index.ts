@@ -3,6 +3,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { APP_NAME } from '../shared/defaults'
 import { IPC, type AppCommand, type SystemProxyState } from '../shared/types'
+import { CertificateAuthority } from './cert-manager'
 import type { MainContext } from './context'
 import { registerIpc } from './ipc'
 import { installApplicationMenu } from './menu'
@@ -27,6 +28,7 @@ let settings: SettingsStore
 let store: SessionStore
 let proxy: CaptureProxy
 let systemProxy: SystemProxyManager
+let certificateAuthority: CertificateAuthority
 
 function broadcast(channel: string, payload?: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -131,6 +133,7 @@ async function bootstrap(): Promise<void> {
 
   settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'))
   systemProxy = new SystemProxyManager(join(app.getPath('userData'), 'system-proxy-backup.json'))
+  certificateAuthority = new CertificateAuthority(join(app.getPath('userData'), 'https-ca'))
 
   // 上次运行如果是崩溃退出，先把系统代理恢复成用户原值
   if (!IS_SELFTEST) systemProxy.recover()
@@ -158,8 +161,11 @@ async function bootstrap(): Promise<void> {
       allowLan: settings.get().allowLan,
       maxBodySize: settings.get().maxBodySize,
       recordTunnels: settings.get().recordTunnels,
-      recording: true
-    }
+      recording: true,
+      decryptHttps: settings.get().decryptHttps,
+      allowInsecureUpstream: settings.get().allowInsecureUpstream
+    },
+    certificateAuthority
   )
 
   const ctx: MainContext = {
@@ -181,7 +187,7 @@ async function bootstrap(): Promise<void> {
   if (IS_SELFTEST) {
     win.webContents.once('did-finish-load', () => {
       win.show()
-      runSelfTest({ window: win, proxy, store, rootDir: process.cwd() })
+      runSelfTest({ window: win, proxy, store, ca: certificateAuthority, rootDir: process.cwd() })
         .then((code) => {
           setTimeout(() => app.exit(code), 100)
         })

@@ -1,9 +1,12 @@
 import http from 'node:http'
+import https from 'node:https'
 import net from 'node:net'
+import tls from 'node:tls'
 import { performance } from 'node:perf_hooks'
 import os from 'node:os'
 import type { Duplex } from 'node:stream'
-import type { ComposePayload, EntryMeta, HeaderPair, ProxyStatus } from '../shared/types'
+import type { ComposePayload, EntryMeta, HeaderPair, HttpsCaInfo, ProxyStatus } from '../shared/types'
+import type { CertificateAuthority } from './cert-manager'
 import type { SessionStore, StoredTransaction } from './session-store'
 
 export interface ProxyOptions {
@@ -12,6 +15,12 @@ export interface ProxyOptions {
   maxBodySize: number
   recordTunnels: boolean
   recording: boolean
+  /** 是否对 HTTPS CONNECT 连接做 TLS 中间人解密 */
+  decryptHttps: boolean
+  /** 是否忽略代理到上游服务器的 TLS 证书错误 */
+  allowInsecureUpstream: boolean
+  /** 仅测试使用：额外信任的上游 CA PEM */
+  upstreamCa?: string
 }
 
 export interface ProxyHooks {
@@ -44,12 +53,13 @@ interface DispatchParams {
   body?: Buffer | null
   clientRes?: http.ServerResponse
   perfStart: number
+  secure?: boolean
 }
 
 /**
  * HTTP 抓包代理。
  * - 支持标准 HTTP 代理请求（absolute-form URL）
- * - HTTPS 通过 CONNECT 隧道透传，只记录一条提示条目，不做解密
+ * - HTTPS 默认通过 CONNECT 隧道透传；开启 HTTPS 解密后使用本地 CA 做 TLS 中间人
  * - 请求/响应体按配置上限截断捕获，供详情面板查看
  */
 export class CaptureProxy {
@@ -57,11 +67,14 @@ export class CaptureProxy {
   private options: ProxyOptions
   private status: ProxyStatus
   private sockets = new Set<Duplex>()
+  private readonly mitmHttpServer: http.Server
+  private readonly mitmTargets = new WeakMap<net.Socket, { host: string; port: number }>()
 
   constructor(
     private readonly store: SessionStore,
     private readonly hooks: ProxyHooks,
-    options: ProxyOptions
+    options: ProxyOptions,
+    private readonly ca?: CertificateAuthority
   ) {
     this.options = { ...options }
     this.status = {
@@ -71,10 +84,42 @@ export class CaptureProxy {
       recording: options.recording,
       startedAt: undefined
     }
+
+    this.mitmHttpServer = http.createServer((req, res) => this.onDecryptedRequest(req, res))
+    this.mitmHttpServer.on('clientError', (_error, socket) => {
+      if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n')
+    })
   }
 
   getStatus(): ProxyStatus {
     return { ...this.status }
+  }
+
+  getHttpsCaInfo(): HttpsCaInfo {
+    if (!this.ca) {
+      return {
+        supported: false,
+        installable: false,
+        generated: false,
+        platform: process.platform,
+        error: '当前环境未初始化 HTTPS 证书管理器'
+      }
+    }
+    return this.ca.getInfo()
+  }
+
+  ensureHttpsCa(): HttpsCaInfo {
+    if (!this.ca) return this.getHttpsCaInfo()
+    return this.ca.ensure()
+  }
+
+  installHttpsCa(): HttpsCaInfo {
+    if (!this.ca) return this.getHttpsCaInfo()
+    return this.ca.install()
+  }
+
+  getHttpsCaPem(): string {
+    return this.ca?.getCaPem() ?? ''
   }
 
   updateOptions(patch: Partial<ProxyOptions>): void {
@@ -175,15 +220,19 @@ export class CaptureProxy {
     }
   }
 
-  /** 重放指定请求（仅 HTTP） */
+  /** 重放指定请求；HTTPS 需要是已解密条目，原始 CONNECT 隧道不可重放 */
   resend(id: string): EntryMeta {
     const source = this.store.get(id)
     if (!source) throw new Error('原请求已不存在')
     if (source.meta.state === 'pending') throw new Error('请求尚未完成，暂时无法重放')
-    if (source.meta.protocol !== 'http' || source.meta.method === 'CONNECT') {
-      throw new Error('HTTPS 隧道请求无法重放，FakeCharles 仅支持 HTTP')
+    if (source.meta.tunnel || source.meta.method === 'CONNECT') {
+      throw new Error('HTTPS 隧道请求无法重放，请先开启 HTTPS 解密并选择解密后的请求')
     }
     const target = new URL(source.meta.url)
+    if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+      throw new Error('当前请求协议不支持重放')
+    }
+    const isHttps = target.protocol === 'https:'
     const headers = buildOutgoingHeaders(source.requestHeaders, target)
     const body = source.requestBody ?? (source.requestChunks.length ? Buffer.concat(source.requestChunks) : null)
     const tx = this.store.create({
@@ -192,8 +241,9 @@ export class CaptureProxy {
       host: source.meta.host,
       port: source.meta.port,
       path: source.meta.path,
-      protocol: 'http',
+      protocol: isHttps ? 'https' : 'http',
       clientIp: '127.0.0.1',
+      decrypted: isHttps,
       note: source.requestTruncated ? '重放请求（原请求体已被截断）' : '重放请求',
       repeatOf: source.meta.id,
       httpVersion: 'HTTP/1.1'
@@ -218,7 +268,8 @@ export class CaptureProxy {
       target,
       headers,
       body,
-      perfStart
+      perfStart,
+      secure: isHttps
     })
     return tx.meta
   }
@@ -319,14 +370,16 @@ export class CaptureProxy {
   }
 
   private buildTransaction(req: http.IncomingMessage, target: URL, clientIp: string): StoredTransaction {
+    const isHttps = target.protocol === 'https:'
     const tx = this.store.create({
       method: req.method || 'GET',
       url: target.toString(),
-      host: target.hostname,
-      port: Number(target.port || 80),
+      host: bareHostname(target.hostname),
+      port: Number(target.port || (isHttps ? 443 : 80)),
       path: `${target.pathname}${target.search}`,
-      protocol: 'http',
+      protocol: isHttps ? 'https' : 'http',
       clientIp,
+      decrypted: isHttps,
       httpVersion: `HTTP/${req.httpVersion}`
     })
     tx.requestHeaders = collectHeaders(req.rawHeaders)
@@ -343,7 +396,7 @@ export class CaptureProxy {
    * 代理请求会把上游响应实时 pipe 回客户端；Compose / Repeat 则不传 clientRes，只消费并记录响应。
    */
   private dispatch(params: DispatchParams): void {
-    const { tx, target, method, headers, incoming, body, clientRes, perfStart } = params
+    const { tx, target, method, headers, incoming, body, clientRes, perfStart, secure = false } = params
     const captureLimit = this.options.maxBodySize
     let requestCaptured = 0
     let responseCaptured = 0
@@ -359,15 +412,29 @@ export class CaptureProxy {
       }
     }
 
-    const upstream = http.request({
-      protocol: 'http:',
-      hostname: target.hostname,
-      port: Number(target.port || 80),
-      method,
-      path: `${target.pathname || '/'}${target.search}`,
-      headers,
-      agent: false
-    })
+    const upstreamHost = bareHostname(target.hostname)
+    const upstream = secure
+      ? https.request({
+          protocol: 'https:',
+          hostname: upstreamHost,
+          port: Number(target.port || 443),
+          method,
+          path: `${target.pathname || '/'}${target.search}`,
+          headers,
+          agent: false,
+          rejectUnauthorized: !this.options.allowInsecureUpstream,
+          servername: net.isIP(upstreamHost) ? undefined : upstreamHost,
+          ...(this.options.upstreamCa ? { ca: this.options.upstreamCa } : {})
+        })
+      : http.request({
+          protocol: 'http:',
+          hostname: upstreamHost,
+          port: Number(target.port || 80),
+          method,
+          path: `${target.pathname || '/'}${target.search}`,
+          headers,
+          agent: false
+        })
     upstream.setTimeout(REQUEST_TIMEOUT_MS)
     upstream.on('timeout', () => upstream.destroy(new Error('请求超时（5 分钟）')))
 
@@ -490,6 +557,10 @@ export class CaptureProxy {
       return
     }
 
+    if (this.options.decryptHttps && this.ca) {
+      if (this.startMitm(req, clientSocket, head, target)) return
+    }
+
     const tx =
       this.options.recording && this.options.recordTunnels
         ? this.buildTunnelTransaction(req, target.host, target.port)
@@ -529,6 +600,101 @@ export class CaptureProxy {
     upstream.on('close', () => {
       if (tx) this.store.finalize(tx, 'complete')
       if (!clientSocket.destroyed) clientSocket.destroy()
+    })
+  }
+
+  /**
+   * 对 CONNECT 执行 TLS 中间人：
+   * 客户端先和本地伪造证书握手，之后 HTTP 请求以明文交给 mitmHttpServer。
+   * 证书生成失败时返回 false，让调用方退回原始 TCP 隧道。
+   */
+  private startMitm(
+    _req: http.IncomingMessage,
+    clientSocket: Duplex,
+    head: Buffer,
+    target: { host: string; port: number }
+  ): boolean {
+    if (!this.ca) return false
+
+    let leaf: { key: string; cert: string }
+    try {
+      leaf = this.ca.getCertificate(target.host)
+    } catch (error) {
+      this.hooks.onError(`HTTPS 解密证书准备失败：${friendlyError(error as NodeJS.ErrnoException)}`)
+      return false
+    }
+
+    try {
+      clientSocket.write('HTTP/1.1 200 Connection Established\r\nProxy-Agent: FakeCharles\r\n\r\n')
+      if (head?.length) clientSocket.unshift(head)
+
+      const secureContext = tls.createSecureContext({ key: leaf.key, cert: leaf.cert })
+      const tlsSocket = new tls.TLSSocket(clientSocket as net.Socket, {
+        isServer: true,
+        secureContext,
+        ALPNProtocols: ['http/1.1']
+      })
+
+      const timer = setTimeout(() => {
+        tlsSocket.destroy(new Error('HTTPS 解密握手超时'))
+      }, 10_000)
+
+      tlsSocket.once('secure', () => {
+        clearTimeout(timer)
+        this.mitmTargets.set(tlsSocket, { host: target.host, port: target.port })
+        try {
+          this.mitmHttpServer.emit('connection', tlsSocket)
+        } catch (error) {
+          this.hooks.onError(`HTTPS 解密连接初始化失败：${friendlyError(error as NodeJS.ErrnoException)}`)
+          tlsSocket.destroy()
+        }
+      })
+      tlsSocket.on('error', (error) => {
+        clearTimeout(timer)
+        this.hooks.onError(`HTTPS 解密握手失败：${friendlyError(error as NodeJS.ErrnoException)}`)
+        tlsSocket.destroy()
+      })
+      tlsSocket.on('close', () => clearTimeout(timer))
+    } catch (error) {
+      this.hooks.onError(`HTTPS 解密启动失败：${friendlyError(error as NodeJS.ErrnoException)}`)
+      if (!clientSocket.destroyed) clientSocket.destroy()
+    }
+
+    return true
+  }
+
+  private onDecryptedRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
+    const socket = req.socket as net.Socket
+    const targetInfo = this.mitmTargets.get(socket)
+    if (!targetInfo) {
+      res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' })
+      res.end('HTTPS 解密上下文丢失')
+      return
+    }
+
+    const perfStart = performance.now()
+    let target: URL
+    try {
+      target = buildHttpsTarget(targetInfo.host, targetInfo.port, req.url || '/')
+    } catch {
+      res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' })
+      res.end('Bad Request')
+      return
+    }
+
+    const tx = this.options.recording
+      ? this.buildTransaction(req, target, normalizeIp(socket.remoteAddress))
+      : null
+    const headers = forwardHeaders(req, target)
+    this.dispatch({
+      tx,
+      method: req.method || 'GET',
+      target,
+      headers,
+      incoming: req,
+      clientRes: res,
+      perfStart,
+      secure: true
     })
   }
 
@@ -757,6 +923,25 @@ function filterRawHeaders(raw: string[], drop: Set<string>): string[] {
 function normalizeIp(address?: string): string {
   if (!address) return '-'
   return address.startsWith('::ffff:') ? address.slice(7) : address
+}
+
+/** 根据 CONNECT 目标和解密后的请求行构造 HTTPS URL */
+function buildHttpsTarget(host: string, port: number, rawUrl: string): URL {
+  if (/^https?:\/\//i.test(rawUrl)) {
+    const parsed = new URL(rawUrl)
+    if (parsed.protocol !== 'https:') throw new Error('HTTPS 连接中出现了非 HTTPS 请求')
+    return parsed
+  }
+
+  const hostPart = net.isIP(host) === 6 ? `[${host}]` : host
+  const portPart = port === 443 ? '' : `:${port}`
+  const path = rawUrl === '*' ? '/' : rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`
+  return new URL(`https://${hostPart}${portPart}${path}`)
+}
+
+/** URL.hostname 对 IPv6 可能带方括号，TLS/HTTP 客户端需要去掉 */
+function bareHostname(hostname: string): string {
+  return hostname.replace(/^\[/, '').replace(/\]$/, '')
 }
 
 function splitHostPort(value: string): { host: string; port: number } | null {

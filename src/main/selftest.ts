@@ -1,11 +1,14 @@
 import { app, nativeImage, type BrowserWindow } from 'electron'
 import { execFileSync } from 'node:child_process'
 import http from 'node:http'
+import https from 'node:https'
 import net from 'node:net'
+import tls from 'node:tls'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { buildHar } from './har'
+import type { CertificateAuthority } from './cert-manager'
 import type { CaptureProxy } from './proxy-server'
 import { SessionStore } from './session-store'
 import { notifySystemProxyChange, readRegistryValue, SystemProxyManager } from './system-proxy'
@@ -14,6 +17,7 @@ interface SelfTestOptions {
   window: BrowserWindow
   proxy: CaptureProxy
   store: SessionStore
+  ca: CertificateAuthority
   rootDir: string
 }
 
@@ -148,6 +152,152 @@ function startTargetServer(): Promise<{ server: http.Server; port: number }> {
   })
 }
 
+/** 启动一个使用本地 CA 证书的 HTTPS 目标服务器，用于验证 MITM */
+function startHttpsTargetServer(ca: CertificateAuthority): Promise<{ server: https.Server; port: number }> {
+  const leaf = ca.getCertificate('127.0.0.1')
+  const server = https.createServer({ key: leaf.key, cert: leaf.cert }, (req, res) => {
+    let body = ''
+    req.on('data', (chunk: Buffer) => (body += chunk.toString('utf8')))
+    req.on('end', () => {
+      let received: unknown = body
+      try {
+        received = JSON.parse(body || '{}')
+      } catch {
+        received = body
+      }
+      const response = JSON.stringify(
+        {
+          secure: true,
+          method: req.method,
+          url: req.url,
+          received,
+          host: req.headers.host
+        },
+        null,
+        2
+      )
+      res.writeHead(200, {
+        'content-type': 'application/json; charset=utf-8',
+        'content-length': Buffer.byteLength(response)
+      })
+      res.end(response)
+    })
+  })
+
+  return new Promise((resolve, reject) => {
+    server.on('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      if (!address || typeof address === 'string') {
+        reject(new Error('无法获取 HTTPS 目标服务器端口'))
+        return
+      }
+      resolve({ server, port: address.port })
+    })
+  })
+}
+
+/** 通过代理的 CONNECT + 本地 CA 发起一个真实的 HTTPS 请求 */
+function requestViaMitmProxy(
+  proxyPort: number,
+  targetPort: number,
+  caPem: string,
+  path: string,
+  method = 'GET',
+  payload: unknown = null
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect(proxyPort, '127.0.0.1')
+    let settled = false
+    const fail = (error: Error): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      socket.destroy()
+      reject(error)
+    }
+    const timer = setTimeout(() => fail(new Error('HTTPS 解密代理测试超时')), 10_000)
+
+    let connectBuffer = Buffer.alloc(0)
+    const onConnectData = (chunk: Buffer): void => {
+      connectBuffer = Buffer.concat([connectBuffer, chunk])
+      const headerEnd = connectBuffer.indexOf('\r\n\r\n')
+      if (headerEnd < 0) return
+      socket.removeListener('data', onConnectData)
+      const head = connectBuffer.subarray(0, headerEnd).toString('utf8')
+      if (!/^HTTP\/1\.1 200/i.test(head)) {
+        fail(new Error(`CONNECT 失败：${head.split('\r\n')[0] ?? 'unknown'}`))
+        return
+      }
+
+      const tlsSocket = tls.connect(
+        {
+          socket,
+          ca: caPem,
+          rejectUnauthorized: true,
+          ALPNProtocols: ['h2', 'http/1.1'],
+          checkServerIdentity: (_host, cert) => tls.checkServerIdentity('127.0.0.1', cert)
+        },
+        () => {
+          if (tlsSocket.alpnProtocol !== 'http/1.1') {
+            fail(new Error(`HTTPS 解密 ALPN 未降级到 HTTP/1.1：${String(tlsSocket.alpnProtocol)}`))
+            return
+          }
+          const body = payload === null ? '' : JSON.stringify(payload)
+          const requestText = [
+            `${method} ${path} HTTP/1.1`,
+            `Host: 127.0.0.1:${targetPort}`,
+            'Content-Type: application/json',
+            ...(body ? [`Content-Length: ${Buffer.byteLength(body)}`] : []),
+            'Connection: close',
+            '',
+            body
+          ].join('\r\n')
+          tlsSocket.write(requestText)
+        }
+      )
+
+      const chunks: Buffer[] = []
+      tlsSocket.on('data', (chunk: Buffer) => chunks.push(chunk))
+      tlsSocket.once('error', fail)
+      tlsSocket.once('end', () => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        const raw = Buffer.concat(chunks).toString('utf8')
+        const headerEnd = raw.indexOf('\r\n\r\n')
+        if (headerEnd < 0) {
+          reject(new Error('HTTPS 响应格式不完整'))
+          return
+        }
+        const headerText = raw.slice(0, headerEnd)
+        const status = Number(headerText.match(/^HTTP\/1\.[01]\s+(\d+)/i)?.[1] ?? 0)
+        resolve({ status, body: raw.slice(headerEnd + 4) })
+      })
+      tlsSocket.once('close', () => {
+        if (!settled) {
+          settled = true
+          clearTimeout(timer)
+          const raw = Buffer.concat(chunks).toString('utf8')
+          const headerEnd = raw.indexOf('\r\n\r\n')
+          if (headerEnd >= 0) {
+            const status = Number(raw.slice(0, headerEnd).match(/^HTTP\/1\.[01]\s+(\d+)/i)?.[1] ?? 0)
+            resolve({ status, body: raw.slice(headerEnd + 4) })
+          } else {
+            reject(new Error('HTTPS 连接已关闭但没有完整响应'))
+          }
+        }
+      })
+    }
+
+    socket.once('connect', () => {
+      socket.write(`CONNECT 127.0.0.1:${targetPort} HTTP/1.1\r\nHost: 127.0.0.1:${targetPort}\r\n\r\n`)
+    })
+    socket.on('data', onConnectData)
+    socket.once('error', fail)
+  })
+}
+
 function startEchoServer(): Promise<{ server: net.Server; port: number }> {
   const server = net.createServer((socket) => {
     socket.pipe(socket)
@@ -268,12 +418,13 @@ async function waitForSelector(check: () => Promise<boolean>, timeoutMs = 3000):
 }
 
 export async function runSelfTest(options: SelfTestOptions): Promise<number> {
-  const { window, proxy, store, rootDir } = options
+  const { window, proxy, store, ca, rootDir } = options
   const outDir = join(rootDir, '.selftest')
   mkdirSync(outDir, { recursive: true })
   const checks: Check[] = []
   let target: Awaited<ReturnType<typeof startTargetServer>> | null = null
   let echo: Awaited<ReturnType<typeof startEchoServer>> | null = null
+  let httpsTarget: Awaited<ReturnType<typeof startHttpsTargetServer>> | null = null
   let proxyPort = 0
 
   const check = (name: string, ok: boolean, detail?: string): void => {
@@ -670,6 +821,155 @@ export async function runSelfTest(options: SelfTestOptions): Promise<number> {
       check('HTTPS 过滤恢复显示 HTTPS 请求', shownTunnel && shownRows === finalRows, `${shownRows} 行`)
     }
 
+    // HTTPS 解密：本地 CA + TLS 中间人 + 解密后的 HTTP 捕获
+    const caInfo = ca.ensure()
+    check(
+      'HTTPS 解密根证书生成',
+      caInfo.generated && Boolean(caInfo.certPem?.includes('BEGIN CERTIFICATE')),
+      caInfo.certPath
+    )
+    const caPem = caInfo.certPem ?? ''
+    if (caPem) {
+      httpsTarget = await startHttpsTargetServer(ca)
+      proxy.updateOptions({ decryptHttps: true, upstreamCa: caPem })
+
+      const secureResponse = await requestViaMitmProxy(
+        proxyPort,
+        httpsTarget.port,
+        caPem,
+        '/api/secure',
+        'POST',
+        { hello: 'mitm' }
+      )
+      check(
+        'HTTPS 解密请求成功返回',
+        secureResponse.status === 200 && secureResponse.body.includes('"secure": true'),
+        `status=${secureResponse.status}`
+      )
+
+      const captured = await waitFor(
+        () => store.list().some((item) => item.protocol === 'https' && !item.tunnel && item.url.includes('/api/secure')),
+        5000
+      )
+      const mitmMeta = store.list().find(
+        (item) => item.protocol === 'https' && !item.tunnel && item.url.includes('/api/secure')
+      )
+      check('HTTPS 解密请求进入会话', captured && Boolean(mitmMeta), mitmMeta?.url)
+      const mitmTx = mitmMeta ? store.get(mitmMeta.id) : undefined
+      const mitmDetail = mitmTx ? await store.toDetail(mitmTx) : null
+      check(
+        'HTTPS 解密捕获请求与响应体',
+        Boolean(mitmDetail?.requestBody.text?.includes('mitm')) &&
+          Boolean(mitmDetail?.responseBody.text?.includes('"secure": true')),
+        `${mitmDetail?.responseBody.text?.length ?? 0} 字符`
+      )
+
+      const tunnelForHttpsPort = store
+        .list()
+        .find((item) => item.tunnel && item.url.includes(`127.0.0.1:${httpsTarget!.port}`))
+      check('HTTPS 解密不生成重复隧道条目', !tunnelForHttpsPort)
+
+      if (mitmMeta) {
+        const repeatedSecure = proxy.resend(mitmMeta.id)
+        await waitFor(() => store.get(repeatedSecure.id)?.meta.state === 'complete', 5000)
+        const repeatedTx = store.get(repeatedSecure.id)
+        const repeatedDetail = repeatedTx ? await store.toDetail(repeatedTx) : null
+        check(
+          'HTTPS 解密请求可重放',
+          repeatedDetail?.status === 200 && Boolean(repeatedDetail.responseBody.text?.includes('"secure": true')),
+          `status=${repeatedDetail?.status}`
+        )
+
+        // 自签名/内部上游证书：默认拒绝，开启忽略开关后允许访问
+        proxy.updateOptions({ upstreamCa: undefined, allowInsecureUpstream: false })
+        const rejectedUpstream = await requestViaMitmProxy(
+          proxyPort,
+          httpsTarget.port,
+          caPem,
+          '/api/insecure'
+        )
+        check(
+          '上游自签名证书默认被拒绝',
+          rejectedUpstream.status === 502,
+          `status=${rejectedUpstream.status}`
+        )
+
+        proxy.updateOptions({ allowInsecureUpstream: true })
+        const allowedUpstream = await requestViaMitmProxy(
+          proxyPort,
+          httpsTarget.port,
+          caPem,
+          '/api/insecure'
+        )
+        check(
+          '忽略上游证书错误后可访问',
+          allowedUpstream.status === 200 && allowedUpstream.body.includes('"secure": true'),
+          `status=${allowedUpstream.status}`
+        )
+        proxy.updateOptions({ allowInsecureUpstream: false, upstreamCa: caPem })
+
+        await exec(`(() => {
+          const input = document.querySelector('[data-testid="filter-input"]');
+          if (!input) return;
+          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+          setter.call(input, 'api/secure');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        })()`)
+        await sleep(300)
+        await exec(`document.querySelector('[data-entry-id="${mitmMeta.id}"]')?.click()`)
+        await sleep(300)
+        const httpsDetailUrl = await exec<string>(
+          `document.querySelector('[data-testid="detail-url"]')?.textContent?.trim() ?? ''`
+        )
+        check('HTTPS 解密条目在界面显示', httpsDetailUrl.startsWith('https://'), httpsDetailUrl)
+
+        await exec(`document.querySelector('[data-testid="tab-response"]')?.click()`)
+        await sleep(150)
+        await exec(`document.querySelector('[data-testid="subtab-body"]')?.click()`)
+        await sleep(300)
+        const httpsBody = await exec<string>(
+          `document.querySelector('[data-testid="body-text"]')?.textContent ?? ''`
+        )
+        check('HTTPS 解密响应体在界面显示', httpsBody.includes('"secure": true'), `${httpsBody.length} 字符`)
+
+        await exec(`(() => {
+          const input = document.querySelector('[data-testid="filter-input"]');
+          if (!input) return;
+          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+          setter.call(input, '');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        })()`)
+        await sleep(350)
+        const httpsShot = await window.webContents.capturePage()
+        writeFileSync(join(outDir, 'screenshot-https-decrypted.png'), httpsShot.toPNG())
+      }
+
+      await exec(`document.querySelector('button[title^="设置"]')?.click()`)
+      const caSettingsReady = await waitForSelector(
+        () => exec<boolean>(`Boolean(document.querySelector('.fc-modal'))`),
+        2000
+      )
+      const caInstallButton = await exec<boolean>(
+        `Boolean(document.querySelector('[data-testid="https-ca-install"]'))`
+      )
+      check(
+        'HTTPS 根证书安装入口可见',
+        caSettingsReady && (process.platform === 'win32' ? caInstallButton : true),
+        process.platform
+      )
+      if (caSettingsReady) {
+        await sleep(600)
+        const caSettingsShot = await window.webContents.capturePage()
+        writeFileSync(join(outDir, 'screenshot-settings-https.png'), caSettingsShot.toPNG())
+        await exec(`document.querySelector('.fc-modal-close')?.click()`)
+        await sleep(200)
+      }
+
+      proxy.updateOptions({ decryptHttps: false, upstreamCa: undefined })
+      httpsTarget.server.close()
+      httpsTarget = null
+    }
+
     // 暂停记录：请求仍然转发，但不写入会话
     const pausedCount = store.list().length
     proxy.setRecording(false)
@@ -782,7 +1082,9 @@ export async function runSelfTest(options: SelfTestOptions): Promise<number> {
         'screenshot-html.png',
         'screenshot-image.png',
         'screenshot-https-hidden.png',
-        'screenshot-filter.png'
+        'screenshot-filter.png',
+        'screenshot-https-decrypted.png',
+        'screenshot-settings-https.png'
       ]
     }
     writeFileSync(join(outDir, 'result.json'), JSON.stringify(result, null, 2), 'utf8')
@@ -804,5 +1106,6 @@ export async function runSelfTest(options: SelfTestOptions): Promise<number> {
     await proxy.stop(true)
     target?.server.close()
     echo?.server.close()
+    httpsTarget?.server.close()
   }
 }

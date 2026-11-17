@@ -6,6 +6,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   allowLan: false,
   // 默认像 Charles 一样接管 Windows 系统代理，关闭窗口时恢复
   autoSystemProxy: true,
+  // HTTPS 解密需要用户主动安装根证书，默认关闭
+  decryptHttps: false,
+  allowInsecureUpstream: false,
   maxBodySize: 5 * 1024 * 1024,
   maxEntries: 3000,
   recordTunnels: true

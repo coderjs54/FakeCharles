@@ -111,7 +111,7 @@ defineExpose({ focusFilter })
       type="button"
       data-testid="https-filter"
       :aria-pressed="showHttps ? 'true' : 'false'"
-      :title="showHttps ? '隐藏 HTTPS 请求（CONNECT 隧道）' : '显示 HTTPS 请求（CONNECT 隧道）'"
+      :title="showHttps ? '隐藏 HTTPS 请求' : '显示 HTTPS 请求'"
       @click="toggleHttpsVisible"
     >
       <AppIcon name="lock" :size="12" />

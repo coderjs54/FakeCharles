@@ -34,6 +34,8 @@ export interface EntryMeta {
   responseMime: string
   /** 是否为 HTTPS CONNECT 隧道（未解密） */
   tunnel: boolean
+  /** 是否为通过本地 CA 解密后的 HTTPS 请求 */
+  decrypted?: boolean
   note?: string
   /** 若为重放请求，指向原请求 id */
   repeatOf?: string
@@ -99,6 +101,10 @@ export interface AppSettings {
   allowLan: boolean
   /** 启动代理时自动接管 Windows 系统代理，退出时恢复 */
   autoSystemProxy: boolean
+  /** 是否启用本地 CA，对 HTTPS 做 TLS 中间人解密 */
+  decryptHttps: boolean
+  /** 是否忽略代理到上游服务器的 TLS 证书错误（仅调试自签名/内部站点） */
+  allowInsecureUpstream: boolean
   /** 单个请求/响应体最大捕获字节数 */
   maxBodySize: number
   /** 会话最大保留条目数 */
@@ -113,6 +119,20 @@ export interface SystemProxyState {
   active: boolean
   /** 当前接管的地址，例如 127.0.0.1:8888 */
   server: string
+  error?: string
+}
+
+/** 本地 HTTPS 解密根证书状态 */
+export interface HttpsCaInfo {
+  /** 当前平台是否支持生成/安装（生成跨平台可用） */
+  supported: boolean
+  /** 是否可以通过应用一键安装到系统信任存储 */
+  installable: boolean
+  generated: boolean
+  certPath?: string
+  certPem?: string
+  platform: NodeJS.Platform
+  message?: string
   error?: string
 }
 
@@ -155,6 +175,10 @@ export const IPC = {
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
   systemProxyGet: 'system-proxy:get',
+  httpsCaInfo: 'https-ca:info',
+  httpsCaEnsure: 'https-ca:ensure',
+  httpsCaInstall: 'https-ca:install',
+  httpsCaReveal: 'https-ca:reveal',
   clipboardWrite: 'clipboard:write',
   bodySave: 'body:save',
   eventEntry: 'event:entry',

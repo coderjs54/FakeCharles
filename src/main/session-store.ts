@@ -11,6 +11,7 @@ export interface TransactionInit {
   protocol: 'http' | 'https'
   clientIp: string
   tunnel?: boolean
+  decrypted?: boolean
   note?: string
   repeatOf?: string
   httpVersion?: string
@@ -100,6 +101,7 @@ export class SessionStore {
       requestMime: '',
       responseMime: '',
       tunnel: Boolean(init.tunnel),
+      decrypted: Boolean(init.decrypted),
       note: init.note,
       repeatOf: init.repeatOf
     }
