@@ -5,6 +5,7 @@ import {
   IPC,
   type AppCommand,
   type AppSettings,
+  type BodyView,
   type ComposePayload,
   type EntryDetail,
   type EntryMeta,
@@ -28,7 +29,10 @@ const api: FakeCharlesApi = {
   listEntries: () => ipcRenderer.invoke(IPC.sessionList) as Promise<EntryMeta[]>,
   clearSession: () => ipcRenderer.invoke(IPC.sessionClear) as Promise<void>,
   removeEntry: (id: string) => ipcRenderer.invoke(IPC.sessionRemove, id) as Promise<void>,
-  getEntry: (id: string) => ipcRenderer.invoke(IPC.sessionEntry, id) as Promise<EntryDetail | null>,
+  getEntry: (id: string, lazyBodies = false) =>
+    ipcRenderer.invoke(IPC.sessionEntry, id, lazyBodies) as Promise<EntryDetail | null>,
+  getEntryBody: (id: string, side: 'request' | 'response') =>
+    ipcRenderer.invoke(IPC.sessionBody, id, side) as Promise<BodyView | null>,
   repeatEntry: (id: string) => ipcRenderer.invoke(IPC.sessionRepeat, id) as Promise<EntryMeta>,
   compose: (payload: ComposePayload) => ipcRenderer.invoke(IPC.sessionCompose, payload) as Promise<EntryMeta>,
   saveSession: () => ipcRenderer.invoke(IPC.sessionSave),
@@ -51,7 +55,8 @@ const api: FakeCharlesApi = {
   onStatus: (callback: (status: ProxyStatus) => void) => subscribe(IPC.eventStatus, callback),
   onSettings: (callback: (settings: AppSettings) => void) => subscribe(IPC.eventSettings, callback),
   onSystemProxy: (callback: (state: SystemProxyState) => void) => subscribe(IPC.eventSystemProxy, callback),
-  onCommand: (callback: (command: AppCommand) => void) => subscribe(IPC.eventCommand, callback)
+  onCommand: (callback: (command: AppCommand) => void) => subscribe(IPC.eventCommand, callback),
+  onError: (callback: (message: string) => void) => subscribe(IPC.eventError, callback)
 }
 
 contextBridge.exposeInMainWorld('api', api)

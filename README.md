@@ -20,7 +20,7 @@ FakeCharles 是一个面向开发调试的 HTTP/HTTPS 抓包工具。它在本�
 - `Structure` 树形视图与 `Sequence` 时序视图
 - URL、方法、状态码文本过滤，以及 HTTPS 请求显示/隐藏开关
 - 请求详情：Overview、Timing、Headers、Query、Cookies、Body、Raw
-- gzip / deflate / br 解码，JSON 格式化高亮
+- gzip / deflate / br / zstd 解码，JSON 格式化高亮
 - HTML 沙箱预览、图片预览、二进制 Hex 查看
 - 复制 URL、复制为 cURL、保存请求/响应体
 - 请求重放（含解密后的 HTTPS）、Compose 手动构造请求（支持粘贴 cURL 与 HTTPS 地址）、右键菜单操作
@@ -166,6 +166,8 @@ self signed certificate; if the root CA is installed locally, try running Node.j
 | `pnpm build` | 类型检查 + 构建主进程、预加载和渲染进程 |
 | `pnpm start` | 预览已构建的应用 |
 | `pnpm typecheck` | 执行 TypeScript / Vue 类型检查 |
+| `pnpm test` | 运行 Vitest 单元测试 |
+| `pnpm test:watch` | 以监听模式运行单元测试 |
 | `pnpm selftest` | 构建并运行端到端自测，生成截图与结果文件 |
 | `pnpm dist` | 构建当前平台的分发包 |
 | `pnpm dist:win` | 生成 Windows NSIS 安装包 |

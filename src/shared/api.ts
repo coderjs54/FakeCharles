@@ -1,6 +1,7 @@
 import type {
   AppCommand,
   AppSettings,
+  BodyView,
   ComposePayload,
   EntryDetail,
   EntryMeta,
@@ -28,7 +29,8 @@ export interface FakeCharlesApi {
   listEntries: () => Promise<EntryMeta[]>
   clearSession: () => Promise<void>
   removeEntry: (id: string) => Promise<void>
-  getEntry: (id: string) => Promise<EntryDetail | null>
+  getEntry: (id: string, lazyBodies?: boolean) => Promise<EntryDetail | null>
+  getEntryBody: (id: string, side: 'request' | 'response') => Promise<BodyView | null>
   repeatEntry: (id: string) => Promise<EntryMeta>
   compose: (payload: ComposePayload) => Promise<EntryMeta>
   saveSession: () => Promise<SaveResult | null>
@@ -52,4 +54,5 @@ export interface FakeCharlesApi {
   onSettings: (callback: (settings: AppSettings) => void) => () => void
   onSystemProxy: (callback: (state: SystemProxyState) => void) => () => void
   onCommand: (callback: (command: AppCommand) => void) => () => void
+  onError: (callback: (message: string) => void) => () => void
 }

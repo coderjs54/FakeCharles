@@ -6,7 +6,7 @@ import { IPC } from '../shared/types'
 import { decodeBuffer } from './body'
 import type { MainContext } from './context'
 import { buildHar } from './har'
-import type { SessionFileData } from './session-store'
+import { LAZY_BODY_THRESHOLD, type SessionFileData } from './session-store'
 
 const SESSION_FILTERS = [
   { name: 'FakeCharles 会话', extensions: ['fchls', 'json'] },
@@ -42,10 +42,15 @@ export function registerIpc(ctx: MainContext): void {
     ctx.store.remove(id)
   })
 
-  ipcMain.handle(IPC.sessionEntry, async (_event, id: string): Promise<EntryDetail | null> => {
+  ipcMain.handle(IPC.sessionEntry, async (_event, id: string, lazyBodies = false): Promise<EntryDetail | null> => {
     const tx = ctx.store.get(id)
     if (!tx) return null
-    return ctx.store.toDetail(tx)
+    // 详情列表只需要元数据和小 Body；大 Body 由 sessionBody 按需拉取
+    return ctx.store.toDetail(tx, lazyBodies ? { lazyBodyThreshold: LAZY_BODY_THRESHOLD } : undefined)
+  })
+
+  ipcMain.handle(IPC.sessionBody, async (_event, id: string, side: 'request' | 'response') => {
+    return ctx.store.getBodyView(id, side === 'request' ? 'request' : 'response')
   })
 
   ipcMain.handle(IPC.sessionRepeat, (_event, id: string) => ctx.proxy.resend(id))

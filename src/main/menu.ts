@@ -76,8 +76,8 @@ export function installApplicationMenu(ctx: MainContext): void {
               message: `${APP_NAME} ${APP_VERSION}`,
               detail:
                 '一个 Charles 风格的桌面 HTTP 抓包代理。\n\n' +
-                '· 仅抓取 HTTP 明文请求，HTTPS 以 CONNECT 隧道透传\n' +
-                '· 支持 Structure / Sequence 视图、请求重放、Compose、会话保存与 HAR 导出\n\n' +
+                '· 支持 HTTP 抓包，并可通过本地 CA 解密 HTTPS（需安装并信任根证书）\n' +
+                '· 支持 Structure / Sequence 视图、请求重放、Compose（cURL / HTTPS）、会话保存与 HAR 导出\n\n' +
                 `Electron ${process.versions.electron} · Chromium ${process.versions.chrome} · Node ${process.versions.node}`
             })
           }

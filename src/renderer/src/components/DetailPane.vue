@@ -107,9 +107,9 @@ async function repeat(): Promise<void> {
             <AppIcon name="lock" :size="10" />
             HTTPS 隧道
           </span>
-          <span v-else-if="detail.decrypted" class="fc-detail-tag fc-detail-tag--decrypted">
+          <span v-else-if="detail.decrypted" class="fc-detail-tag fc-detail-tag--decrypted" title="HTTPS 内容已解密">
             <AppIcon name="lock" :size="10" />
-            HTTPS 解密
+            HTTPS
           </span>
         </div>
       </header>

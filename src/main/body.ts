@@ -48,38 +48,40 @@ export interface DecodedBuffer {
 }
 
 /** 按 Content-Encoding 解码响应体（gzip / deflate / br / zstd），并限制解压后的最大体积 */
-export async function decodeBuffer(buffer: Buffer, contentEncoding?: string): Promise<DecodedBuffer> {
+export async function decodeBuffer(
+  buffer: Buffer,
+  contentEncoding?: string,
+  maxOutputLength = MAX_DECODED_SIZE
+): Promise<DecodedBuffer> {
   const encoding = (contentEncoding ?? '').toLowerCase().trim()
   if (!encoding || encoding === 'identity') return { data: buffer }
   try {
     if (encoding === 'gzip' || encoding === 'x-gzip') {
-      return { data: await gunzipAsync(buffer, { maxOutputLength: MAX_DECODED_SIZE }) }
+      return { data: await gunzipAsync(buffer, { maxOutputLength }) }
     }
     if (encoding === 'br') {
-      return { data: await brotliAsync(buffer, { maxOutputLength: MAX_DECODED_SIZE }) }
+      return { data: await brotliAsync(buffer, { maxOutputLength }) }
     }
     if (encoding === 'deflate') {
       try {
-        return { data: await inflateAsync(buffer, { maxOutputLength: MAX_DECODED_SIZE }) }
+        return { data: await inflateAsync(buffer, { maxOutputLength }) }
       } catch (error) {
         // 超过输出上限时直接失败，避免再尝试 raw deflate 造成二次解压
         if (isOutputLimitError(error)) throw error
-        return { data: await inflateRawAsync(buffer, { maxOutputLength: MAX_DECODED_SIZE }) }
+        return { data: await inflateRawAsync(buffer, { maxOutputLength }) }
       }
     }
     const zlibModule = await import('node:zlib')
     const zstdDecompress = (zlibModule as unknown as { zstdDecompress?: ZstdDecompress }).zstdDecompress
     if (encoding === 'zstd' && typeof zstdDecompress === 'function') {
       const data = await new Promise<Buffer>((resolve, reject) => {
-        zstdDecompress(buffer, { maxOutputLength: MAX_DECODED_SIZE }, (err, out) =>
-          err ? reject(err) : resolve(out)
-        )
+        zstdDecompress(buffer, { maxOutputLength }, (err, out) => (err ? reject(err) : resolve(out)))
       })
       return { data }
     }
   } catch (error) {
     const message = isOutputLimitError(error)
-      ? `内容解压后超过 ${MAX_DECODED_SIZE / 1024 / 1024} MB 上限，已停止解码`
+      ? `内容解压后超过 ${maxOutputLength / 1024 / 1024} MB 上限，已停止解码`
       : `内容解码失败：${(error as Error).message}`
     return { data: buffer, error: message }
   }

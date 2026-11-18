@@ -10,6 +10,8 @@
     "dev": "electron-vite dev",
     "start": "electron-vite preview",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "build": "pnpm typecheck && electron-vite build",
     "selftest": "electron-vite build && electron . --selftest",
     "dist": "pnpm build && electron-builder --publish never",
@@ -26,6 +28,7 @@
     "sass-embedded": "^1.108.2",
     "typescript": "^5.9.3",
     "vite": "^8.3.8",
+    "vitest": "^5.1.0",
     "vue": "^3.5.45",
     "vue-tsc": "^3.3.14"
   },

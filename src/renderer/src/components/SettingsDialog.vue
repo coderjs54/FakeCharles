@@ -27,6 +27,8 @@ const errorText = ref('')
 const saving = ref(false)
 const caInfo = ref<HttpsCaInfo | null>(null)
 const caBusy = ref(false)
+// 已启用解密的用户视为此前已确认信任；新开启时必须勾选确认
+const caTrustConfirmed = ref(settings.value?.decryptHttps === true)
 
 const caStatusText = computed(() => {
   const info = caInfo.value
@@ -89,8 +91,13 @@ async function installCa(): Promise<void> {
   try {
     const info = await window.api.installHttpsCa()
     caInfo.value = info
-    if (info.error) push(info.error, 'error')
-    else push(info.message ?? '根证书安装完成', 'success')
+    if (info.error) {
+      push(info.error, 'error')
+    } else {
+      // Windows 一键安装成功后自动视为已信任
+      caTrustConfirmed.value = true
+      push(info.message ?? '根证书安装完成', 'success')
+    }
   } catch (error) {
     push(errorMessage(error), 'error')
   } finally {
@@ -129,6 +136,10 @@ async function save(): Promise<void> {
   }
   if (form.decryptHttps && !caInfo.value?.generated) {
     errorText.value = '请先生成 HTTPS 解密根证书，并安装到系统信任存储后再开启解密'
+    return
+  }
+  if (form.decryptHttps && !caTrustConfirmed.value) {
+    errorText.value = '请先确认已将根证书安装并信任，否则浏览器访问 HTTPS 会报证书错误'
     return
   }
 
@@ -297,6 +308,18 @@ async function save(): Promise<void> {
             证书文件：{{ caFileName }}
           </p>
         </div>
+
+        <label v-if="form.decryptHttps" class="fc-trust-row">
+          <input
+            v-model="caTrustConfirmed"
+            class="fc-trust-checkbox"
+            type="checkbox"
+            data-testid="ca-trust-confirm"
+          />
+          <span class="fc-trust-text">
+            我已将根证书安装到系统或浏览器的信任存储；否则开启解密后浏览器访问 HTTPS 会报证书错误
+          </span>
+        </label>
 
         <label class="fc-switch-row">
           <span class="fc-switch-text">
@@ -706,6 +729,29 @@ async function save(): Promise<void> {
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.fc-trust-row {
+  display: flex;
+  align-items: flex-start;
+  gap: $spacing-md;
+  padding: 8px 10px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: $radius-sm;
+  background: $color-primary-soft;
+  color: $color-text-secondary;
+  font-size: 10.5px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.fc-trust-checkbox {
+  margin-top: 2px;
+  flex: none;
+}
+
+.fc-trust-text {
+  flex: 1;
 }
 
 .fc-settings-tip {

@@ -799,7 +799,7 @@ export class CaptureProxy {
       protocol: 'https',
       clientIp: normalizeIp(req.socket.remoteAddress),
       tunnel: true,
-      note: 'HTTPS 流量通过 CONNECT 隧道透传，内容未解密。FakeCharles 当前仅支持抓取 HTTP 明文请求。'
+      note: 'HTTPS 流量通过 CONNECT 隧道透传，内容未解密。如需查看具体请求，请在设置中开启 HTTPS 解密。'
     })
     tx.requestHeaders = collectHeaders(req.rawHeaders)
     tx.requestHeaderSize = rawHeadersSize(req.rawHeaders)

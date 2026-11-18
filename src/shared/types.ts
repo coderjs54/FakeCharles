@@ -59,6 +59,8 @@ export interface BodyView {
   text?: string
   base64?: string
   decodeError?: string
+  /** 大 Body 被延迟加载，渲染进程需要通过 getEntryBody 单独拉取 */
+  deferred?: boolean
 }
 
 export interface TimingInfo {
@@ -167,6 +169,7 @@ export const IPC = {
   sessionClear: 'session:clear',
   sessionRemove: 'session:remove',
   sessionEntry: 'session:entry',
+  sessionBody: 'session:body',
   sessionRepeat: 'session:repeat',
   sessionCompose: 'session:compose',
   sessionSave: 'session:save',
@@ -189,5 +192,6 @@ export const IPC = {
   eventStatus: 'event:status',
   eventSettings: 'event:settings',
   eventSystemProxy: 'event:system-proxy',
-  eventCommand: 'event:command'
+  eventCommand: 'event:command',
+  eventError: 'event:error'
 } as const

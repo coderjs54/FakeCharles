@@ -25,6 +25,9 @@ const initialized = ref(false)
 let bound = false
 let detailToken = 0
 let refreshTimer: number | undefined
+// 同类运行期错误 5 秒内只提示一次，避免 MITM 失败等情况刷屏
+let lastRuntimeError = ''
+let lastRuntimeErrorAt = 0
 
 const filteredEntries = computed<EntryMeta[]>(() => {
   const query = filter.value.trim().toLowerCase()
@@ -85,7 +88,8 @@ async function loadDetail(id: string, silent = false): Promise<void> {
     loadingDetail.value = true
   }
   try {
-    const data = await window.api.getEntry(id)
+    // 详情优先拉取元数据和小 Body，大 Body 由 BodyViewer 按需加载
+    const data = await window.api.getEntry(id, true)
     if (token === detailToken && selectedId.value === id) detail.value = data
   } catch {
     if (token === detailToken) detail.value = null
@@ -160,6 +164,13 @@ async function init(): Promise<void> {
   })
   window.api.onSystemProxy((state) => {
     systemProxyState.value = state
+  })
+  window.api.onError((message) => {
+    const now = Date.now()
+    if (message === lastRuntimeError && now - lastRuntimeErrorAt < 5000) return
+    lastRuntimeError = message
+    lastRuntimeErrorAt = now
+    useToast().push(message, 'error')
   })
 
   try {

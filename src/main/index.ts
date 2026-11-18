@@ -151,7 +151,11 @@ async function bootstrap(): Promise<void> {
     store,
     {
       onStatus: (status) => broadcast(IPC.eventStatus, status),
-      onError: (message) => console.error(`[${APP_NAME}] ${message}`),
+      onError: (message) => {
+        console.error(`[${APP_NAME}] ${message}`)
+        // 把运行期错误同步给界面，避免只写控制台导致用户无从排查
+        broadcast(IPC.eventError, message)
+      },
       onLifecycle: () => {
         syncSystemProxy()
       }

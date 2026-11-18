@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { EntryDetail, EntryMeta, HeaderPair, TimingInfo } from '../shared/types'
+import type { BodyView, EntryDetail, EntryMeta, HeaderPair, TimingInfo } from '../shared/types'
 import { renderBody } from './body'
 
 export interface TransactionInit {
@@ -38,6 +38,20 @@ export interface StoredTransaction {
   responseEncoding?: string
   timings: TimingInfo
   httpVersion: string
+  /** 已完成条目的 Body 展示缓存，避免详情面板重复解压 */
+  bodyViewCache?: BodyViewCache
+  /** 正在生成缓存时复用同一个 Promise，避免并发重复解压 */
+  bodyViewPromises?: BodyViewPromises
+}
+
+interface BodyViewCache {
+  request?: BodyView
+  response?: BodyView
+}
+
+interface BodyViewPromises {
+  request?: Promise<BodyView>
+  response?: Promise<BodyView>
 }
 
 export interface SessionEntryData {
@@ -72,6 +86,17 @@ export interface SessionStoreEvents {
 
 /** 默认会话内容内存预算：256 MB；长会话或大 Body 下自动淘汰最旧记录 */
 const DEFAULT_MAX_SESSION_BYTES = 256 * 1024 * 1024
+
+/** Body 展示缓存上限：超过该大小的条目不做缓存，避免和原始 Buffer 重复占用内存 */
+const MAX_CACHED_BODY_BYTES = 512 * 1024
+
+/** 详情接口中超过该大小的 Body 先返回占位，由渲染进程按需拉取 */
+export const LAZY_BODY_THRESHOLD = 512 * 1024
+
+export interface DetailOptions {
+  /** 超过该字节数的 Body 返回 deferred 占位，减少一次性 IPC 数据量 */
+  lazyBodyThreshold?: number
+}
 
 /**
  * 抓包会话存储。
@@ -243,9 +268,22 @@ export class SessionStore {
     if (emitEvents) this.events.onRemove(id)
   }
 
-  /** 条目当前占用的内存估算：头字节 + 实际捕获的 Body 字节 */
+  /** 条目当前占用的内存估算：头字节 + 实际捕获的 Body 字节 + Body 展示缓存 */
   private bytesOf(tx: StoredTransaction): number {
-    return tx.requestHeaderSize + tx.responseHeaderSize + tx.requestCapturedSize + tx.responseCapturedSize
+    return (
+      tx.requestHeaderSize +
+      tx.responseHeaderSize +
+      tx.requestCapturedSize +
+      tx.responseCapturedSize +
+      this.bodyViewBytes(tx.bodyViewCache?.request) +
+      this.bodyViewBytes(tx.bodyViewCache?.response)
+    )
+  }
+
+  /** BodyView 的内存估算：字符串约为 2 字节/字符，base64 为 ASCII */
+  private bodyViewBytes(view?: BodyView): number {
+    if (!view) return 0
+    return (view.text?.length ?? 0) * 2 + (view.base64?.length ?? 0)
   }
 
   /** 条目加入会话时计入内存预算 */
@@ -272,12 +310,13 @@ export class SessionStore {
     this.accountedBytes.delete(id)
   }
 
-  async toDetail(tx: StoredTransaction): Promise<EntryDetail> {
-    const requestBuffer = tx.requestBody ?? (tx.requestChunks.length ? Buffer.concat(tx.requestChunks) : null)
-    const responseBuffer = tx.responseBody ?? (tx.responseChunks.length ? Buffer.concat(tx.responseChunks) : null)
+  async toDetail(tx: StoredTransaction, options: DetailOptions = {}): Promise<EntryDetail> {
+    // 大 Body 只返回占位，等渲染进程打开对应标签页时再单独拉取
+    const requestDeferred = this.shouldDeferBody(tx, 'request', options.lazyBodyThreshold)
+    const responseDeferred = this.shouldDeferBody(tx, 'response', options.lazyBodyThreshold)
     const [requestBody, responseBody] = await Promise.all([
-      renderBody(requestBuffer, tx.requestBodySize, tx.requestTruncated, tx.meta.requestMime, tx.requestEncoding),
-      renderBody(responseBuffer, tx.responseBodySize, tx.responseTruncated, tx.meta.responseMime, tx.responseEncoding)
+      requestDeferred ? Promise.resolve(this.deferredBodyView(tx, 'request')) : this.readBodyView(tx, 'request'),
+      responseDeferred ? Promise.resolve(this.deferredBodyView(tx, 'response')) : this.readBodyView(tx, 'response')
     ])
     return {
       ...tx.meta,
@@ -290,6 +329,83 @@ export class SessionStore {
       timings: { ...tx.timings },
       httpVersion: tx.httpVersion
     }
+  }
+
+  /** 按需获取完整 Body，供渲染进程打开 Body 标签页时调用 */
+  async getBodyView(id: string, side: 'request' | 'response'): Promise<BodyView | null> {
+    const tx = this.items.get(id)
+    if (!tx) return null
+    return this.readBodyView(tx, side)
+  }
+
+  /** 判断某个 Body 是否应该延迟加载；pending 内容仍在变化，不做延迟 */
+  private shouldDeferBody(
+    tx: StoredTransaction,
+    side: 'request' | 'response',
+    threshold?: number
+  ): boolean {
+    if (threshold === undefined || tx.meta.state === 'pending') return false
+    const captured = side === 'request' ? tx.requestCapturedSize : tx.responseCapturedSize
+    return captured > threshold
+  }
+
+  /** 生成延迟加载占位；deferred=true 时渲染进程会通过 getEntryBody 拉取完整内容 */
+  private deferredBodyView(tx: StoredTransaction, side: 'request' | 'response'): BodyView {
+    const isRequest = side === 'request'
+    return {
+      available: true,
+      size: isRequest ? tx.requestBodySize : tx.responseBodySize,
+      capturedSize: isRequest ? tx.requestCapturedSize : tx.responseCapturedSize,
+      decodedSize: 0,
+      truncated: isRequest ? tx.requestTruncated : tx.responseTruncated,
+      textTruncated: false,
+      kind: 'empty',
+      mime: isRequest ? tx.meta.requestMime : tx.meta.responseMime,
+      encoding: isRequest ? tx.requestEncoding : tx.responseEncoding,
+      deferred: true
+    }
+  }
+
+  /** 取单侧 BodyView，并对已完成且体积较小的条目做缓存 */
+  private async readBodyView(tx: StoredTransaction, side: 'request' | 'response'): Promise<BodyView> {
+    const cacheable =
+      tx.meta.state !== 'pending' &&
+      tx.requestCapturedSize + tx.responseCapturedSize <= MAX_CACHED_BODY_BYTES
+    if (cacheable) {
+      const cached = tx.bodyViewCache?.[side]
+      if (cached) return cached
+      const pending = tx.bodyViewPromises?.[side]
+      if (pending) return pending
+    }
+
+    const promise = this.renderBodyView(tx, side)
+    if (!cacheable) return promise
+
+    tx.bodyViewPromises ??= {}
+    tx.bodyViewPromises[side] = promise
+      .then((view) => {
+        tx.bodyViewCache ??= {}
+        tx.bodyViewCache[side] = view
+        this.reaccount(tx)
+        this.trim()
+        return view
+      })
+      .finally(() => {
+        if (tx.bodyViewPromises) tx.bodyViewPromises[side] = undefined
+      })
+    return tx.bodyViewPromises[side]!
+  }
+
+  private async renderBodyView(
+    tx: StoredTransaction,
+    side: 'request' | 'response'
+  ): Promise<BodyView> {
+    if (side === 'request') {
+      const buffer = tx.requestBody ?? (tx.requestChunks.length ? Buffer.concat(tx.requestChunks) : null)
+      return renderBody(buffer, tx.requestBodySize, tx.requestTruncated, tx.meta.requestMime, tx.requestEncoding)
+    }
+    const buffer = tx.responseBody ?? (tx.responseChunks.length ? Buffer.concat(tx.responseChunks) : null)
+    return renderBody(buffer, tx.responseBodySize, tx.responseTruncated, tx.meta.responseMime, tx.responseEncoding)
   }
 
   exportSession(): SessionFileData {
