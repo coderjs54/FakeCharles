@@ -197,6 +197,7 @@ self signed certificate; if the root CA is installed locally, try running Node.j
 | `pnpm selftest` | 构建并运行端到端自测，生成截图与结果文件 |
 | `pnpm dist` | 构建当前平台的分发包 |
 | `pnpm dist:win` | 生成 Windows NSIS 安装包 |
+| `pnpm dist:linux` | 生成 Linux AppImage 分发包 |
 | `pnpm dist:dir` | 生成未压缩的打包目录，便于快速验证 |
 
 ### 打包 Windows 安装包
@@ -214,6 +215,22 @@ release/win-unpacked/FakeCharles.exe
 
 安装包支持选择安装目录，并创建桌面和开始菜单快捷方式。当前产物未配置代码签名，正式分发时建议配置 Windows 代码签名证书。
 
+### 打包 Linux AppImage
+
+在 Linux 环境中执行：
+
+```bash
+pnpm dist:linux
+```
+
+产物位于：
+
+```text
+release/FakeCharles-1.0.0.AppImage
+```
+
+AppImage 未做代码签名；首次运行前需要执行 `chmod +x`，部分发行版还需要安装 `libfuse2` 才能直接挂载运行。
+
 ## 持续集成
 
 GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在以下场景触发：
@@ -223,14 +240,12 @@ GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在以下场景触�
 - 推送 `v*` 标签
 - 手动触发
 
-CI 会在 `windows-latest` 上执行：
+CI 会并行执行两个任务：
 
-1. 使用 pnpm 安装依赖
-2. ESLint 静态检查
-3. 类型检查与构建
-4. 运行 Electron 端到端自测
-5. 上传自测报告与截图
-6. 构建 Windows 安装包并上传 artifact
+- `windows-latest`：ESLint、类型检查与构建、单元测试、Electron 自测、打包 NSIS 安装包，并上传自测报告与截图
+- `ubuntu-latest`：类型检查与构建、单元测试、打包 AppImage
+
+推送 `v*` 标签时，只有两个任务都成功才会创建 GitHub Release。
 
 ### 发布新版本
 
@@ -247,6 +262,7 @@ git push origin v1.0.0
 
 ```text
 FakeCharles-Setup-<version>-x64.exe
+FakeCharles-<version>.AppImage
 ```
 
 注意：标签名必须与 `package.json` 的 `version` 一致，否则 CI 会在构建前失败。普通的 `main` push 和 PR 只运行测试与构建，不会创建 Release。

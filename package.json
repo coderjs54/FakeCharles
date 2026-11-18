@@ -19,6 +19,7 @@
     "selftest": "electron-vite build && electron . --selftest",
     "dist": "pnpm build && electron-builder --publish never",
     "dist:win": "pnpm build && electron-builder --win --publish never",
+    "dist:linux": "pnpm build && electron-builder --linux --publish never",
     "dist:dir": "pnpm build && electron-builder --dir --publish never"
   },
   "devDependencies": {
