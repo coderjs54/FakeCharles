@@ -177,7 +177,7 @@ async function copyRaw(): Promise<void> {
   background: $color-surface;
   color: $color-text-tertiary;
   font-family: $font-mono;
-  font-size: 9.5px;
+  font-size: 10.5px;
 }
 
 .fc-panel-meta-dot {
@@ -195,7 +195,7 @@ async function copyRaw(): Promise<void> {
   padding: 6px $spacing-xl;
   border-bottom: 1px solid $color-divider;
   font-family: $font-mono;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -206,7 +206,7 @@ async function copyRaw(): Promise<void> {
   background: $color-surface-muted;
   color: $color-text-tertiary;
   font-family: $font-ui;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -257,13 +257,13 @@ async function copyRaw(): Promise<void> {
 
 .fc-raw-label {
   color: $color-text-secondary;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
 }
 
 .fc-raw-hint {
   color: $color-text-tertiary;
-  font-size: 9.5px;
+  font-size: 10.5px;
 }
 
 .fc-raw-copy {
@@ -275,7 +275,7 @@ async function copyRaw(): Promise<void> {
   padding: 0 7px;
   border-radius: $radius-xs;
   color: $color-text-secondary;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .fc-raw-copy:hover {
@@ -288,7 +288,7 @@ async function copyRaw(): Promise<void> {
   padding: $spacing-lg $spacing-xl;
   color: #23303f;
   font-family: $font-mono;
-  font-size: 11.5px;
+  font-size: 12.5px;
   line-height: 1.62;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

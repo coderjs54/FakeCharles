@@ -103,7 +103,7 @@ const emit = defineEmits<{ (event: 'update:modelValue', value: string): void }>(
   background: $color-primary-soft;
   color: $color-primary;
   font-family: $font-mono;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 16px;
   text-align: center;
 }

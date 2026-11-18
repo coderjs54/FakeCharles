@@ -221,7 +221,7 @@ defineExpose({ focusFilter })
 }
 
 .fc-brand-name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 650;
   letter-spacing: -0.015em;
   color: $color-text;
@@ -229,7 +229,7 @@ defineExpose({ focusFilter })
 
 .fc-brand-sub {
   color: $color-text-tertiary;
-  font-size: 8.5px;
+  font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -252,7 +252,7 @@ defineExpose({ focusFilter })
   border-radius: $radius-sm;
   background: $color-surface;
   color: $color-text-secondary;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 500;
   transition: border-color $transition-fast, background $transition-fast, color $transition-fast;
 }
@@ -336,7 +336,7 @@ defineExpose({ focusFilter })
   padding: 0 9px;
   border-radius: 5px;
   color: $color-text-tertiary;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 500;
   transition: background $transition-fast, color $transition-fast, box-shadow $transition-fast;
 }
@@ -361,7 +361,7 @@ defineExpose({ focusFilter })
   border-radius: $radius-sm;
   background: $color-surface;
   color: $color-text-tertiary;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 500;
   transition: border-color $transition-fast, background $transition-fast, color $transition-fast;
 }
@@ -401,7 +401,7 @@ defineExpose({ focusFilter })
   background: $color-surface-sunken;
   color: $color-text-tertiary;
   font-family: $font-mono;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 14px;
   text-align: center;
 }
@@ -472,7 +472,7 @@ defineExpose({ focusFilter })
   height: 100%;
   padding: 0 66px 0 27px;
   color: $color-text;
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
 .fc-filter-input::placeholder {
@@ -501,7 +501,7 @@ defineExpose({ focusFilter })
   right: 8px;
   color: $color-text-tertiary;
   font-family: $font-mono;
-  font-size: 9px;
+  font-size: 10px;
   pointer-events: none;
 }
 
@@ -537,7 +537,7 @@ defineExpose({ focusFilter })
 
 .fc-proxy-address {
   font-family: $font-mono;
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: -0.01em;
 }
 

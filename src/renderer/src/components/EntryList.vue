@@ -469,7 +469,7 @@ onBeforeUnmount(() => {
 
 .fc-list-title {
   color: $color-text-secondary;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -477,7 +477,7 @@ onBeforeUnmount(() => {
 
 .fc-list-count {
   color: $color-text-tertiary;
-  font-size: 10.5px;
+  font-size: 11.5px;
 }
 
 .fc-list-topbar-spacer {
@@ -509,7 +509,7 @@ onBeforeUnmount(() => {
   border-radius: $radius-pill;
   background: $color-danger-soft;
   color: $color-danger;
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 600;
 }
 
@@ -522,7 +522,7 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid $color-border;
   background: $color-surface-muted;
   color: $color-text-tertiary;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -579,7 +579,7 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid #f4f6f9;
   background: #fbfcfe;
   color: $color-text-secondary;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 550;
   cursor: pointer;
   user-select: none;
@@ -614,7 +614,7 @@ onBeforeUnmount(() => {
 .fc-folder-count {
   color: $color-text-tertiary;
   font-family: $font-mono;
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 500;
 }
 
@@ -627,7 +627,7 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid #f4f6f9;
   background: $color-surface;
   color: $color-text;
-  font-size: 11.5px;
+  font-size: 12.5px;
   cursor: default;
   user-select: none;
 }
@@ -682,7 +682,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   color: $color-text-tertiary;
   font-family: $font-mono;
-  font-size: 10px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -690,7 +690,7 @@ onBeforeUnmount(() => {
 .fc-method {
   overflow: hidden;
   font-family: $font-mono;
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-overflow: ellipsis;
@@ -719,7 +719,7 @@ onBeforeUnmount(() => {
 
 .fc-status {
   font-family: $font-mono;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -746,13 +746,13 @@ onBeforeUnmount(() => {
 .fc-cell-mono {
   color: $color-text-secondary;
   font-family: $font-mono;
-  font-size: 10px;
+  font-size: 11px;
   white-space: nowrap;
 }
 
 .fc-time {
   color: $color-text-tertiary;
-  font-size: 9.5px;
+  font-size: 10.5px;
 }
 
 .fc-entry-url {
@@ -776,7 +776,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   color: $color-text-tertiary;
   font-family: $font-mono;
-  font-size: 10px;
+  font-size: 11px;
   text-overflow: ellipsis;
 }
 
@@ -824,7 +824,7 @@ onBeforeUnmount(() => {
   background: $color-surface-muted;
   color: $color-text-secondary;
   font-family: $font-mono;
-  font-size: 10.5px;
+  font-size: 11.5px;
 }
 
 .fc-list-empty-actions {

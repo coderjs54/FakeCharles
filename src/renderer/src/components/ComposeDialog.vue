@@ -285,7 +285,7 @@ onMounted(() => {
   padding: 0 12px;
   border-radius: $radius-xs;
   color: $color-text-secondary;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   transition: background $transition-fast, color $transition-fast, box-shadow $transition-fast;
 }
@@ -314,7 +314,7 @@ onMounted(() => {
   background: $color-surface;
   color: $color-text;
   font-family: $font-mono;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -327,7 +327,7 @@ onMounted(() => {
   background: $color-surface;
   color: $color-text;
   font-family: $font-mono;
-  font-size: 11.5px;
+  font-size: 12.5px;
   transition: border-color $transition-fast, box-shadow $transition-fast;
 }
 
@@ -351,7 +351,7 @@ onMounted(() => {
 
 .fc-compose-label {
   color: $color-text-secondary;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
@@ -363,7 +363,7 @@ onMounted(() => {
   background: $color-surface;
   color: $color-text;
   font-family: $font-mono;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
   resize: vertical;
   transition: border-color $transition-fast, box-shadow $transition-fast;
@@ -379,7 +379,7 @@ onMounted(() => {
 
 .fc-compose-hint {
   color: $color-text-tertiary;
-  font-size: 9.5px;
+  font-size: 10.5px;
 }
 
 .fc-compose-hint code {
@@ -412,14 +412,14 @@ onMounted(() => {
 
 .fc-curl-preview-label {
   color: $color-text-tertiary;
-  font-size: 9.5px;
+  font-size: 10.5px;
 }
 
 .fc-curl-preview-value {
   overflow: hidden;
   color: $color-text;
   font-family: $font-mono;
-  font-size: 10.5px;
+  font-size: 11.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -433,7 +433,7 @@ onMounted(() => {
   border-radius: $radius-sm;
   background: $color-warning-soft;
   color: $color-warning;
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.5;
 }
 
@@ -448,7 +448,7 @@ onMounted(() => {
   border-radius: $radius-sm;
   background: $color-danger-soft;
   color: $color-danger;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -459,7 +459,7 @@ onMounted(() => {
   border-radius: $radius-sm;
   background: $color-surface;
   color: $color-text-secondary;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 500;
 }
 

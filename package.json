@@ -1,6 +1,6 @@
 {
   "name": "fake-charles",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "FakeCharles - a Charles-like HTTP/HTTPS debugging proxy desktop app",
   "main": "./out/main/index.js",
   "author": "FakeCharles",

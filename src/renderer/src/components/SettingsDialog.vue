@@ -461,7 +461,7 @@ async function save(): Promise<void> {
 .fc-settings-heading {
   margin-bottom: $spacing-md;
   color: $color-text-tertiary;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -483,13 +483,13 @@ async function save(): Promise<void> {
 
 .fc-field-label {
   color: $color-text-secondary;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 500;
 }
 
 .fc-field-hint {
   color: $color-text-tertiary;
-  font-size: 9.5px;
+  font-size: 10.5px;
   line-height: 1.5;
 }
 
@@ -502,7 +502,7 @@ async function save(): Promise<void> {
   background: $color-surface;
   color: $color-text;
   font-family: $font-mono;
-  font-size: 12px;
+  font-size: 13px;
   transition: border-color $transition-fast, box-shadow $transition-fast;
 }
 
@@ -539,7 +539,7 @@ async function save(): Promise<void> {
   overflow: hidden;
   color: $color-text-secondary;
   font-family: $font-mono;
-  font-size: 11px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -577,13 +577,13 @@ async function save(): Promise<void> {
 
 .fc-switch-title {
   color: $color-text;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
 }
 
 .fc-switch-desc {
   color: $color-text-tertiary;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.5;
 }
 
@@ -651,7 +651,7 @@ async function save(): Promise<void> {
   border-radius: $radius-sm;
   background: $color-surface-muted;
   color: $color-text-tertiary;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.5;
 }
 
@@ -709,14 +709,14 @@ async function save(): Promise<void> {
 
 .fc-ca-title {
   color: $color-text-secondary;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 
 .fc-ca-state {
   overflow: hidden;
   color: $color-text-tertiary;
-  font-size: 9.5px;
+  font-size: 10.5px;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -733,7 +733,7 @@ async function save(): Promise<void> {
 .fc-ca-desc {
   margin-top: 5px;
   color: $color-text-tertiary;
-  font-size: 9.5px;
+  font-size: 10.5px;
   line-height: 1.6;
 }
 
@@ -751,7 +751,7 @@ async function save(): Promise<void> {
   border-radius: $radius-xs;
   background: $color-surface;
   color: $color-text-secondary;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .fc-ca-button:hover {
@@ -782,7 +782,7 @@ async function save(): Promise<void> {
   overflow: hidden;
   color: $color-text-tertiary;
   font-family: $font-mono;
-  font-size: 9px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -796,7 +796,7 @@ async function save(): Promise<void> {
   border-radius: $radius-sm;
   background: $color-primary-soft;
   color: $color-text-secondary;
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.5;
   cursor: pointer;
 }
@@ -820,7 +820,7 @@ async function save(): Promise<void> {
   border-radius: $radius-sm;
   background: $color-warning-soft;
   color: $color-warning;
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.5;
 }
 
@@ -838,7 +838,7 @@ async function save(): Promise<void> {
   border-radius: $radius-sm;
   background: $color-primary-soft;
   color: $color-text-secondary;
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.65;
 }
 
@@ -848,7 +848,7 @@ async function save(): Promise<void> {
   background: rgba(37, 99, 235, 0.08);
   color: $color-primary;
   font-family: $font-mono;
-  font-size: 9.5px;
+  font-size: 10.5px;
 }
 
 .fc-settings-tip :deep(.fc-icon) {
@@ -862,7 +862,7 @@ async function save(): Promise<void> {
   border-radius: $radius-sm;
   background: $color-danger-soft;
   color: $color-danger;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -873,7 +873,7 @@ async function save(): Promise<void> {
   border-radius: $radius-sm;
   background: $color-surface;
   color: $color-text-secondary;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 500;
   transition: border-color $transition-fast, background $transition-fast;
 }

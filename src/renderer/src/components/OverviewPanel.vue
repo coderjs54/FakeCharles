@@ -220,7 +220,7 @@ function copyCurl(): void {
 
 .fc-overview-label {
   color: $color-text-tertiary;
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -229,7 +229,7 @@ function copyCurl(): void {
 .fc-overview-value {
   overflow: hidden;
   color: $color-text;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.5;
   text-overflow: ellipsis;
@@ -243,13 +243,13 @@ function copyCurl(): void {
 
 .fc-overview-value--mono {
   font-family: $font-mono;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .fc-overview-status {
   color: $color-text-secondary;
   font-family: $font-mono;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
@@ -290,7 +290,7 @@ function copyCurl(): void {
   border-radius: $radius-sm;
   background: $color-surface;
   color: $color-text-secondary;
-  font-size: 10.5px;
+  font-size: 11.5px;
   white-space: nowrap;
 }
 
@@ -327,13 +327,13 @@ function copyCurl(): void {
   flex-direction: column;
   gap: 2px;
   color: $color-text-secondary;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
 .fc-overview-banner-text strong {
   color: $color-text;
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
 .fc-timing {
@@ -353,7 +353,7 @@ function copyCurl(): void {
 
 .fc-timing-title {
   color: $color-text-secondary;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -362,7 +362,7 @@ function copyCurl(): void {
 .fc-timing-total {
   color: $color-text-tertiary;
   font-family: $font-mono;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .fc-timing-bar {
@@ -404,7 +404,7 @@ function copyCurl(): void {
   align-items: center;
   gap: 5px;
   color: $color-text-tertiary;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .fc-timing-legend-item strong {
@@ -416,7 +416,7 @@ function copyCurl(): void {
 .fc-timing-legend-item--size {
   margin-left: auto;
   font-family: $font-mono;
-  font-size: 9.5px;
+  font-size: 10.5px;
 }
 
 .fc-timing-dot {
@@ -436,7 +436,7 @@ function copyCurl(): void {
 .fc-timing-pending {
   margin-top: $spacing-md;
   color: $color-text-tertiary;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 @keyframes fc-timing-stripes {

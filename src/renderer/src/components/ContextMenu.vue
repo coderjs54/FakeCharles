@@ -190,7 +190,7 @@ onBeforeUnmount(() => {
 .fc-context-shortcut {
   color: $color-text-tertiary;
   font-family: $font-mono;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .fc-context-separator {

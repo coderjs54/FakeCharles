@@ -208,7 +208,7 @@ async function repeat(): Promise<void> {
   background: $color-surface-sunken;
   color: $color-text-secondary;
   font-family: $font-mono;
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -243,7 +243,7 @@ async function repeat(): Promise<void> {
   overflow: hidden;
   color: $color-text;
   font-family: $font-mono;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -256,7 +256,7 @@ async function repeat(): Promise<void> {
   background: $color-surface-sunken;
   color: $color-text-secondary;
   font-family: $font-mono;
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 600;
 }
 
@@ -313,7 +313,7 @@ async function repeat(): Promise<void> {
   margin-top: 5px;
   overflow: hidden;
   color: $color-text-tertiary;
-  font-size: 9.5px;
+  font-size: 10.5px;
   white-space: nowrap;
 }
 
@@ -335,7 +335,7 @@ async function repeat(): Promise<void> {
   background: $color-warning-soft;
   color: $color-warning;
   font-family: $font-ui;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
 }
 
@@ -415,7 +415,7 @@ async function repeat(): Promise<void> {
 
 .fc-detail-empty-title {
   color: $color-text;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -446,7 +446,7 @@ async function repeat(): Promise<void> {
 
 .fc-detail-proxy-label {
   color: $color-text-tertiary;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -456,7 +456,7 @@ async function repeat(): Promise<void> {
   flex: 1;
   color: $color-text;
   font-family: $font-mono;
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
 .fc-detail-proxy-copy {
@@ -468,7 +468,7 @@ async function repeat(): Promise<void> {
   border-radius: $radius-xs;
   background: $color-surface;
   color: $color-text-secondary;
-  font-size: 9.5px;
+  font-size: 10.5px;
 }
 
 .fc-detail-proxy-copy:hover {
@@ -479,7 +479,7 @@ async function repeat(): Promise<void> {
 .fc-detail-proxy-hint {
   margin-top: 7px;
   color: $color-text-tertiary;
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.65;
 }
 
@@ -495,7 +495,7 @@ async function repeat(): Promise<void> {
   background: $color-surface;
   color: $color-text-secondary;
   font-family: $font-mono;
-  font-size: 9.5px;
+  font-size: 10.5px;
   overflow-wrap: anywhere;
 }
 

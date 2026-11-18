@@ -44,7 +44,7 @@ withDefaults(defineProps<{ headers: HeaderPair[]; emptyText?: string }>(), {
   padding-bottom: 5px;
   background: $color-surface-muted;
   color: $color-text-tertiary;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -63,7 +63,7 @@ withDefaults(defineProps<{ headers: HeaderPair[]; emptyText?: string }>(), {
 .fc-header-name {
   color: $color-text-secondary;
   font-family: $font-mono;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   word-break: break-all;
 }
@@ -71,7 +71,7 @@ withDefaults(defineProps<{ headers: HeaderPair[]; emptyText?: string }>(), {
 .fc-header-value {
   color: $color-text;
   font-family: $font-mono;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.55;
   overflow-wrap: anywhere;
   word-break: break-word;

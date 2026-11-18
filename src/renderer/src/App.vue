@@ -341,7 +341,7 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid rgba(180, 83, 9, 0.18);
   background: $color-warning-soft;
   color: $color-warning;
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.5;
   flex: none;
 }
@@ -370,7 +370,7 @@ onBeforeUnmount(() => {
   border: 1px solid currentColor;
   border-radius: $radius-xs;
   color: currentColor;
-  font-size: 10px;
+  font-size: 11px;
   opacity: 0.85;
 }
 
@@ -447,7 +447,7 @@ onBeforeUnmount(() => {
   border-top: 1px solid $color-border;
   background: $color-surface-muted;
   color: $color-text-tertiary;
-  font-size: 9.5px;
+  font-size: 10.5px;
   flex: none;
   overflow: hidden;
   white-space: nowrap;

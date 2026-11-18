@@ -49,7 +49,7 @@ const emit = defineEmits<{
   border-radius: $radius-sm;
   background: $color-surface;
   color: $color-text-secondary;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 500;
 }
 

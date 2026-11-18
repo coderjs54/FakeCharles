@@ -287,7 +287,7 @@ async function saveBody(): Promise<void> {
   overflow: hidden;
   color: $color-text-secondary;
   font-family: $font-mono;
-  font-size: 10.5px;
+  font-size: 11.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -298,7 +298,7 @@ async function saveBody(): Promise<void> {
   background: $color-primary-soft;
   color: $color-primary;
   font-family: $font-mono;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
 }
 
@@ -310,7 +310,7 @@ async function saveBody(): Promise<void> {
 .fc-body-size {
   color: $color-text-tertiary;
   font-family: $font-mono;
-  font-size: 9.5px;
+  font-size: 10.5px;
   white-space: nowrap;
 }
 
@@ -336,7 +336,7 @@ async function saveBody(): Promise<void> {
   padding: 0 7px;
   border-radius: 3px;
   color: $color-text-tertiary;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .fc-body-segment-button:hover {
@@ -388,7 +388,7 @@ async function saveBody(): Promise<void> {
   padding: $spacing-lg $spacing-xl;
   color: #23303f;
   font-family: $font-mono;
-  font-size: 11.5px;
+  font-size: 12.5px;
   line-height: 1.62;
   tab-size: 2;
   white-space: pre;
@@ -403,7 +403,7 @@ async function saveBody(): Promise<void> {
 
 .fc-body-code--hex {
   color: #33506b;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.55;
 }
 
@@ -482,7 +482,7 @@ async function saveBody(): Promise<void> {
   border-radius: $radius-sm;
   background: $color-warning-soft;
   color: $color-warning;
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.6;
 }
 
