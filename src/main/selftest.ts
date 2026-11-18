@@ -791,16 +791,19 @@ export async function runSelfTest(options: SelfTestOptions): Promise<number> {
     const tunnelEntry = store.list().find((item) => item.tunnel)
     check('HTTPS CONNECT 隧道透传并记录提示', tunnelOk && Boolean(tunnelEntry), tunnelEntry?.note?.slice(0, 20))
 
-    // 会话列表仍可交互
+    // 会话列表仍可交互；列表事件会做 50ms 批处理，这里等待隧道行出现
+    const tunnelRendered = tunnelEntry
+      ? await waitForSelector(
+          () => exec<boolean>(`Boolean(document.querySelector('[data-entry-id="${tunnelEntry.id}"]'))`),
+          2000
+        )
+      : false
     const finalRows = await exec<number>(`document.querySelectorAll('[data-entry-id]').length`)
-    check('隧道条目进入列表', finalRows > rowCount, `最终 ${finalRows} 行`)
+    check('隧道条目进入列表', tunnelRendered, `最终 ${finalRows} 行`)
 
     // HTTPS 过滤开关
     if (tunnelEntry) {
-      const tunnelVisible = await exec<boolean>(
-        `Boolean(document.querySelector('[data-entry-id="${tunnelEntry.id}"]'))`
-      )
-      check('HTTPS 请求在列表中可见', tunnelVisible)
+      check('HTTPS 请求在列表中可见', tunnelRendered)
 
       await exec(`document.querySelector('[data-testid="https-filter"]')?.click()`)
       await sleep(350)
@@ -808,7 +811,11 @@ export async function runSelfTest(options: SelfTestOptions): Promise<number> {
         `!document.querySelector('[data-entry-id="${tunnelEntry.id}"]')`
       )
       const hiddenRows = await exec<number>(`document.querySelectorAll('[data-entry-id]').length`)
-      check('HTTPS 过滤隐藏 HTTPS 请求', hiddenTunnel && hiddenRows < finalRows, `${hiddenRows}/${finalRows} 行`)
+      const pressed = await exec<string>(
+        `document.querySelector('[data-testid="https-filter"]')?.getAttribute('aria-pressed') ?? ''`
+      )
+      // 列表使用虚拟滚动，DOM 行数不等于条目总数，因此以隧道行是否消失和开关状态为准
+      check('HTTPS 过滤隐藏 HTTPS 请求', hiddenTunnel && pressed === 'false', `${hiddenRows} 行`)
       const hiddenShot = await window.webContents.capturePage()
       writeFileSync(join(outDir, 'screenshot-https-hidden.png'), hiddenShot.toPNG())
 
@@ -818,7 +825,10 @@ export async function runSelfTest(options: SelfTestOptions): Promise<number> {
         `Boolean(document.querySelector('[data-entry-id="${tunnelEntry.id}"]'))`
       )
       const shownRows = await exec<number>(`document.querySelectorAll('[data-entry-id]').length`)
-      check('HTTPS 过滤恢复显示 HTTPS 请求', shownTunnel && shownRows === finalRows, `${shownRows} 行`)
+      const pressedAgain = await exec<string>(
+        `document.querySelector('[data-testid="https-filter"]')?.getAttribute('aria-pressed') ?? ''`
+      )
+      check('HTTPS 过滤恢复显示 HTTPS 请求', shownTunnel && pressedAgain === 'true', `${shownRows} 行`)
     }
 
     // HTTPS 解密：本地 CA + TLS 中间人 + 解密后的 HTTP 捕获

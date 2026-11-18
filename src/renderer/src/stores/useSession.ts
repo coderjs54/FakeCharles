@@ -22,6 +22,15 @@ const showHttps = ref(true)
 const view = ref<'structure' | 'sequence'>('structure')
 const initialized = ref(false)
 
+/** 列表事件批量刷新间隔：高频抓包时合并为一次数组重建 */
+const ENTRY_FLUSH_INTERVAL_MS = 50
+
+/** 与 entries 保持同步的索引，批量刷新时避免逐条线性查找 */
+const entryIndex = new Map<string, EntryMeta>()
+const pendingUpserts = new Map<string, EntryMeta>()
+const pendingRemovals = new Set<string>()
+let entryFlushTimer: number | undefined
+
 let bound = false
 let detailToken = 0
 let refreshTimer: number | undefined
@@ -44,12 +53,20 @@ const selectedMeta = computed<EntryMeta | null>(() => {
 
 const proxyAddress = computed(() => `${proxyStatus.value.host}:${proxyStatus.value.port}`)
 
-const stats = computed(() => ({
-  total: entries.value.length,
-  filtered: filteredEntries.value.length,
-  https: entries.value.filter((entry) => isHttpsRequest(entry)).length,
-  errors: entries.value.filter((entry) => entry.state === 'error').length
-}))
+const stats = computed(() => {
+  let https = 0
+  let errors = 0
+  for (const entry of entries.value) {
+    if (isHttpsRequest(entry)) https += 1
+    if (entry.state === 'error') errors += 1
+  }
+  return {
+    total: entries.value.length,
+    filtered: filteredEntries.value.length,
+    https,
+    errors
+  }
+})
 
 /** HTTPS 请求包含解密后的请求和未解密的 CONNECT 隧道 */
 function isHttpsRequest(entry: EntryMeta): boolean {
@@ -70,15 +87,56 @@ function sortEntries(list: EntryMeta[]): EntryMeta[] {
   return list.slice().sort((a, b) => a.seq - b.seq)
 }
 
-function upsert(meta: EntryMeta): void {
-  const index = entries.value.findIndex((entry) => entry.id === meta.id)
-  if (index === -1) {
-    entries.value = sortEntries([...entries.value, meta])
+/** 用完整列表替换当前会话，并重建索引 */
+function replaceEntries(metas: EntryMeta[]): void {
+  const sorted = sortEntries(metas)
+  entryIndex.clear()
+  for (const meta of sorted) entryIndex.set(meta.id, meta)
+  entries.value = sorted
+}
+
+/** 把 pending 的增删改合并进索引，只重建一次列表 */
+function applyPendingEntries(): void {
+  if (pendingUpserts.size === 0 && pendingRemovals.size === 0) return
+
+  for (const id of pendingRemovals) entryIndex.delete(id)
+  let hasNewEntry = false
+  for (const meta of pendingUpserts.values()) {
+    if (!entryIndex.has(meta.id)) hasNewEntry = true
+    entryIndex.set(meta.id, meta)
+  }
+  pendingUpserts.clear()
+  pendingRemovals.clear()
+
+  const list = [...entryIndex.values()]
+  if (!hasNewEntry) {
+    // 纯更新或删除时 Map 的插入顺序仍然是 seq 顺序，无需再排序
+    entries.value = list
     return
   }
-  const next = entries.value.slice()
-  next[index] = meta
-  entries.value = next
+
+  const sorted = sortEntries(list)
+  entryIndex.clear()
+  for (const meta of sorted) entryIndex.set(meta.id, meta)
+  entries.value = sorted
+}
+
+function scheduleEntryFlush(): void {
+  if (entryFlushTimer !== undefined) return
+  entryFlushTimer = window.setTimeout(() => {
+    entryFlushTimer = undefined
+    applyPendingEntries()
+  }, ENTRY_FLUSH_INTERVAL_MS)
+}
+
+/** 丢弃尚未刷新的增量与定时器 */
+function cancelEntryFlush(): void {
+  if (entryFlushTimer !== undefined) {
+    window.clearTimeout(entryFlushTimer)
+    entryFlushTimer = undefined
+  }
+  pendingUpserts.clear()
+  pendingRemovals.clear()
 }
 
 async function loadDetail(id: string, silent = false): Promise<void> {
@@ -137,23 +195,30 @@ async function init(): Promise<void> {
   bound = true
 
   window.api.onEntry((meta) => {
-    upsert(meta)
+    pendingUpserts.set(meta.id, meta)
+    scheduleEntryFlush()
     if (meta.id === selectedId.value) scheduleDetailRefresh()
   })
   window.api.onEntryUpdate((meta) => {
-    upsert(meta)
+    pendingUpserts.set(meta.id, meta)
+    scheduleEntryFlush()
     if (meta.id === selectedId.value) scheduleDetailRefresh()
   })
   window.api.onEntryRemove((id) => {
-    entries.value = entries.value.filter((entry) => entry.id !== id)
+    pendingUpserts.delete(id)
+    pendingRemovals.add(id)
+    scheduleEntryFlush()
     if (selectedId.value === id) void select(null)
   })
   window.api.onClear(() => {
+    cancelEntryFlush()
+    entryIndex.clear()
     entries.value = []
     void select(null)
   })
   window.api.onLoaded((metas) => {
-    entries.value = sortEntries(metas)
+    cancelEntryFlush()
+    replaceEntries(metas)
     void select(null)
   })
   window.api.onStatus((status) => {
@@ -180,7 +245,9 @@ async function init(): Promise<void> {
       window.api.getSettings(),
       window.api.getSystemProxy()
     ])
-    entries.value = sortEntries(list)
+    replaceEntries(list)
+    // 合并初始化请求期间已经到达的增量事件，避免覆盖它们
+    applyPendingEntries()
     proxyStatus.value = status
     settings.value = config
     systemProxyState.value = systemState
