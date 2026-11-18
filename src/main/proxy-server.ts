@@ -256,7 +256,9 @@ export class CaptureProxy {
     tx.meta.requestSize = tx.requestHeaderSize + tx.requestBodySize
     if (body) {
       const limit = this.options.maxBodySize
-      tx.requestChunks.push(body.length > limit ? body.subarray(0, limit) : body)
+      const slice = body.length > limit ? body.subarray(0, limit) : body
+      tx.requestChunks.push(slice)
+      tx.requestCapturedSize += slice.length
       if (body.length > limit) tx.requestTruncated = true
     }
     this.store.commit(tx)
@@ -317,7 +319,9 @@ export class CaptureProxy {
     tx.meta.requestSize = tx.requestHeaderSize + tx.requestBodySize
     if (bodyBuffer) {
       const limit = this.options.maxBodySize
-      tx.requestChunks.push(bodyBuffer.length > limit ? bodyBuffer.subarray(0, limit) : bodyBuffer)
+      const slice = bodyBuffer.length > limit ? bodyBuffer.subarray(0, limit) : bodyBuffer
+      tx.requestChunks.push(slice)
+      tx.requestCapturedSize += slice.length
       if (bodyBuffer.length > limit) tx.requestTruncated = true
     }
     this.store.commit(tx)
@@ -418,28 +422,39 @@ export class CaptureProxy {
     }
 
     const upstreamHost = bareHostname(target.hostname)
-    const upstream = secure
-      ? https.request({
-          protocol: 'https:',
-          hostname: upstreamHost,
-          port: Number(target.port || 443),
-          method,
-          path: `${target.pathname || '/'}${target.search}`,
-          headers,
-          agent: false,
-          rejectUnauthorized: !this.options.allowInsecureUpstream,
-          servername: net.isIP(upstreamHost) ? undefined : upstreamHost,
-          ...(this.options.upstreamCa ? { ca: this.options.upstreamCa } : {})
-        })
-      : http.request({
-          protocol: 'http:',
-          hostname: upstreamHost,
-          port: Number(target.port || 80),
-          method,
-          path: `${target.pathname || '/'}${target.search}`,
-          headers,
-          agent: false
-        })
+    let upstream: http.ClientRequest
+    try {
+      upstream = secure
+        ? https.request({
+            protocol: 'https:',
+            hostname: upstreamHost,
+            port: Number(target.port || 443),
+            method,
+            path: `${target.pathname || '/'}${target.search}`,
+            headers,
+            agent: false,
+            rejectUnauthorized: !this.options.allowInsecureUpstream,
+            servername: net.isIP(upstreamHost) ? undefined : upstreamHost,
+            ...(this.options.upstreamCa ? { ca: this.options.upstreamCa } : {})
+          })
+        : http.request({
+            protocol: 'http:',
+            hostname: upstreamHost,
+            port: Number(target.port || 80),
+            method,
+            path: `${target.pathname || '/'}${target.search}`,
+            headers,
+            agent: false
+          })
+    } catch (error) {
+      // http.request 会在 Header 非法等情况下同步抛错；这里兜底，避免留下 pending 条目或抛出到全局
+      const message = friendlyError(error as NodeJS.ErrnoException)
+      if (clientRes && !clientRes.headersSent) {
+        this.sendMessage(clientRes, 502, 'Bad Gateway', message)
+      }
+      finish('error', message)
+      return
+    }
     upstream.setTimeout(REQUEST_TIMEOUT_MS)
     upstream.on('timeout', () => upstream.destroy(new Error('请求超时（5 分钟）')))
 
@@ -468,7 +483,16 @@ export class CaptureProxy {
         try {
           clientRes.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.statusMessage, raw)
         } catch {
-          clientRes.writeHead(upstreamRes.statusCode ?? 502, raw)
+          try {
+            clientRes.writeHead(upstreamRes.statusCode ?? 502, raw)
+          } catch {
+            // 上游响应头包含无法转发的内容时回退到错误页，避免在事件回调里抛出未捕获异常
+            const message = '上游响应头包含无法转发的内容'
+            if (!clientRes.headersSent) this.sendMessage(clientRes, 502, 'Bad Gateway', message)
+            upstreamRes.destroy()
+            finish('error', message)
+            return
+          }
         }
         clientRes.on('error', () => upstreamRes.destroy())
         upstreamRes.on('error', () => {
@@ -484,6 +508,7 @@ export class CaptureProxy {
         if (room > 0) {
           const slice = chunk.length <= room ? chunk : chunk.subarray(0, room)
           tx.responseChunks.push(slice)
+          tx.responseCapturedSize += slice.length
           responseCaptured += slice.length
         }
         if (chunk.length > room) tx.responseTruncated = true
@@ -525,6 +550,7 @@ export class CaptureProxy {
           if (room > 0) {
             const slice = chunk.length <= room ? chunk : chunk.subarray(0, room)
             tx.requestChunks.push(slice)
+            tx.requestCapturedSize += slice.length
             requestCaptured += slice.length
           }
           if (chunk.length > room) tx.requestTruncated = true
@@ -537,7 +563,9 @@ export class CaptureProxy {
       })
       incoming.on('end', () => {
         if (tx) {
+          // 请求体读取完成后立即合并并释放分块，避免与 finalize 阶段重复持有内存
           tx.requestBody = tx.requestChunks.length ? Buffer.concat(tx.requestChunks) : null
+          tx.requestChunks = []
           tx.meta.requestSize = tx.requestHeaderSize + tx.requestBodySize
           this.store.touch(tx)
         }

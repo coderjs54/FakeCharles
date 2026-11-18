@@ -156,6 +156,8 @@ self signed certificate; if the root CA is installed locally, try running Node.j
 | 单个 Body 上限 | 5 MB | 超出部分截断 |
 | 会话最大条目数 | 3000 | 超出后丢弃最早记录 |
 
+> 除条目数限制外，会话内容还有约 256 MB 的内存预算；超出后会优先淘汰最旧记录，避免长时间抓包或大 Body 耗尽内存。
+
 ## 可用命令
 
 | 命令 | 说明 |

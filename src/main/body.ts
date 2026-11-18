@@ -2,10 +2,15 @@ import { brotliDecompress, gunzip, inflate, inflateRaw } from 'node:zlib'
 import { promisify } from 'node:util'
 import type { BodyView } from '../shared/types'
 
-const gunzipAsync = promisify(gunzip)
-const inflateAsync = promisify(inflate)
-const inflateRawAsync = promisify(inflateRaw)
-const brotliAsync = promisify(brotliDecompress)
+const gunzipAsync = promisify(gunzip) as unknown as AsyncDecode
+const inflateAsync = promisify(inflate) as unknown as AsyncDecode
+const inflateRawAsync = promisify(inflateRaw) as unknown as AsyncDecode
+const brotliAsync = promisify(brotliDecompress) as unknown as AsyncDecode
+
+/** 解压输出上限：防止压缩炸弹把主进程内存耗尽（捕获上限只限制压缩后字节） */
+const MAX_DECODED_SIZE = 128 * 1024 * 1024
+
+type AsyncDecode = (buffer: Buffer, options: { maxOutputLength: number }) => Promise<Buffer>
 
 const MAX_DISPLAY_TEXT = 1_500_000
 const MAX_DISPLAY_BINARY = 1_500_000
@@ -42,36 +47,54 @@ export interface DecodedBuffer {
   error?: string
 }
 
-/** 按 Content-Encoding 解码响应体（gzip / deflate / br / zstd） */
+/** 按 Content-Encoding 解码响应体（gzip / deflate / br / zstd），并限制解压后的最大体积 */
 export async function decodeBuffer(buffer: Buffer, contentEncoding?: string): Promise<DecodedBuffer> {
   const encoding = (contentEncoding ?? '').toLowerCase().trim()
   if (!encoding || encoding === 'identity') return { data: buffer }
   try {
     if (encoding === 'gzip' || encoding === 'x-gzip') {
-      return { data: await gunzipAsync(buffer) }
+      return { data: await gunzipAsync(buffer, { maxOutputLength: MAX_DECODED_SIZE }) }
     }
     if (encoding === 'br') {
-      return { data: await brotliAsync(buffer) }
+      return { data: await brotliAsync(buffer, { maxOutputLength: MAX_DECODED_SIZE }) }
     }
     if (encoding === 'deflate') {
       try {
-        return { data: await inflateAsync(buffer) }
-      } catch {
-        return { data: await inflateRawAsync(buffer) }
+        return { data: await inflateAsync(buffer, { maxOutputLength: MAX_DECODED_SIZE }) }
+      } catch (error) {
+        // 超过输出上限时直接失败，避免再尝试 raw deflate 造成二次解压
+        if (isOutputLimitError(error)) throw error
+        return { data: await inflateRawAsync(buffer, { maxOutputLength: MAX_DECODED_SIZE }) }
       }
     }
     const zlibModule = await import('node:zlib')
-    const zstdDecompress = (zlibModule as unknown as { zstdDecompress?: (input: Buffer, cb: (err: Error | null, out: Buffer) => void) => void }).zstdDecompress
+    const zstdDecompress = (zlibModule as unknown as { zstdDecompress?: ZstdDecompress }).zstdDecompress
     if (encoding === 'zstd' && typeof zstdDecompress === 'function') {
       const data = await new Promise<Buffer>((resolve, reject) => {
-        zstdDecompress(buffer, (err, out) => (err ? reject(err) : resolve(out)))
+        zstdDecompress(buffer, { maxOutputLength: MAX_DECODED_SIZE }, (err, out) =>
+          err ? reject(err) : resolve(out)
+        )
       })
       return { data }
     }
   } catch (error) {
-    return { data: buffer, error: `内容解码失败：${(error as Error).message}` }
+    const message = isOutputLimitError(error)
+      ? `内容解压后超过 ${MAX_DECODED_SIZE / 1024 / 1024} MB 上限，已停止解码`
+      : `内容解码失败：${(error as Error).message}`
+    return { data: buffer, error: message }
   }
   return { data: buffer }
+}
+
+type ZstdDecompress = (
+  input: Buffer,
+  options: { maxOutputLength: number },
+  callback: (error: Error | null, output: Buffer) => void
+) => void
+
+/** Node zlib 在解压输出超过 maxOutputLength 时抛出的错误码 */
+function isOutputLimitError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | undefined)?.code === 'ERR_BUFFER_TOO_LARGE'
 }
 
 /** 将捕获到的字节转换为渲染进程可直接展示的 BodyView */

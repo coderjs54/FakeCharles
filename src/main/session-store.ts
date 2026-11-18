@@ -29,6 +29,9 @@ export interface StoredTransaction {
   responseBody: Buffer | null
   requestBodySize: number
   responseBodySize: number
+  /** 实际捕获到内存的请求/响应体字节数（受单 Body 上限截断） */
+  requestCapturedSize: number
+  responseCapturedSize: number
   requestTruncated: boolean
   responseTruncated: boolean
   requestEncoding?: string
@@ -67,6 +70,9 @@ export interface SessionStoreEvents {
   onClear: () => void
 }
 
+/** 默认会话内容内存预算：256 MB；长会话或大 Body 下自动淘汰最旧记录 */
+const DEFAULT_MAX_SESSION_BYTES = 256 * 1024 * 1024
+
 /**
  * 抓包会话存储。
  * 请求/响应体以 Buffer 形式保存在主进程，渲染进程只在需要时拉取详情，
@@ -77,9 +83,19 @@ export class SessionStore {
   private order: string[] = []
   private seq = 0
   private maxEntries = 3000
+  /** 会话内容总内存预算，超出后按最旧优先淘汰 */
+  private maxSessionBytes: number
+  private totalBytes = 0
+  /** 每个条目已计入内存预算的字节数，用于增量更新 */
+  private accountedBytes = new Map<string, number>()
 
-  constructor(private readonly events: SessionStoreEvents, maxEntries = 3000) {
+  constructor(
+    private readonly events: SessionStoreEvents,
+    maxEntries = 3000,
+    maxSessionBytes = DEFAULT_MAX_SESSION_BYTES
+  ) {
     this.maxEntries = maxEntries
+    this.maxSessionBytes = maxSessionBytes
   }
 
   create(init: TransactionInit): StoredTransaction {
@@ -117,6 +133,8 @@ export class SessionStore {
       responseBody: null,
       requestBodySize: 0,
       responseBodySize: 0,
+      requestCapturedSize: 0,
+      responseCapturedSize: 0,
       requestTruncated: false,
       responseTruncated: false,
       timings: { startedAt: meta.startTime },
@@ -129,6 +147,7 @@ export class SessionStore {
     if (!this.items.has(tx.meta.id)) {
       this.items.set(tx.meta.id, tx)
       this.order.push(tx.meta.id)
+      this.account(tx)
       this.events.onAdd(tx.meta)
       this.trim()
     }
@@ -136,7 +155,11 @@ export class SessionStore {
   }
 
   touch(tx: StoredTransaction): void {
-    if (this.items.has(tx.meta.id)) this.events.onUpdate(tx.meta)
+    if (this.items.has(tx.meta.id)) {
+      this.reaccount(tx)
+      this.events.onUpdate(tx.meta)
+      this.trim()
+    }
   }
 
   finalize(tx: StoredTransaction, state: 'complete' | 'error', error?: string): EntryMeta {
@@ -145,8 +168,11 @@ export class SessionStore {
     const completedAt = Date.now()
     tx.timings.completedAt = completedAt
     tx.timings.totalMs = Math.max(0, completedAt - tx.timings.startedAt)
-    tx.requestBody = tx.requestChunks.length ? Buffer.concat(tx.requestChunks) : null
-    tx.responseBody = tx.responseChunks.length ? Buffer.concat(tx.responseChunks) : null
+    // 请求体可能在读取结束时已经合并过；这里只补齐未合并的部分，并及时释放分块内存
+    tx.requestBody ??= tx.requestChunks.length ? Buffer.concat(tx.requestChunks) : null
+    tx.responseBody ??= tx.responseChunks.length ? Buffer.concat(tx.responseChunks) : null
+    tx.requestChunks = []
+    tx.responseChunks = []
     tx.meta.state = state
     tx.meta.error = error
     tx.meta.duration = tx.timings.totalMs
@@ -169,12 +195,15 @@ export class SessionStore {
     if (!this.items.has(id)) return
     this.items.delete(id)
     this.order = this.order.filter((item) => item !== id)
+    this.forget(id)
     this.events.onRemove(id)
   }
 
   clear(): void {
     this.items.clear()
     this.order = []
+    this.totalBytes = 0
+    this.accountedBytes.clear()
     this.events.onClear()
   }
 
@@ -191,11 +220,56 @@ export class SessionStore {
   }
 
   private trim(): void {
-    while (this.order.length > this.maxEntries) {
-      const id = this.order.shift()!
-      this.items.delete(id)
-      this.events.onRemove(id)
+    this.enforceLimits(true)
+  }
+
+  /**
+   * 同时按条目数和总内存预算淘汰最旧记录。
+   * 导入会话时传 false，避免逐条触发 onRemove（由主进程整体广播导入结果）。
+   */
+  private enforceLimits(emitEvents: boolean): void {
+    while (this.order.length > this.maxEntries) this.evictOldest(emitEvents)
+    // 至少保留最新一条，避免单条超大内容刚捕获就被立即淘汰
+    while (this.totalBytes > this.maxSessionBytes && this.order.length > 1) {
+      this.evictOldest(emitEvents)
     }
+  }
+
+  private evictOldest(emitEvents: boolean): void {
+    const id = this.order.shift()
+    if (!id) return
+    this.items.delete(id)
+    this.forget(id)
+    if (emitEvents) this.events.onRemove(id)
+  }
+
+  /** 条目当前占用的内存估算：头字节 + 实际捕获的 Body 字节 */
+  private bytesOf(tx: StoredTransaction): number {
+    return tx.requestHeaderSize + tx.responseHeaderSize + tx.requestCapturedSize + tx.responseCapturedSize
+  }
+
+  /** 条目加入会话时计入内存预算 */
+  private account(tx: StoredTransaction): void {
+    const bytes = this.bytesOf(tx)
+    this.accountedBytes.set(tx.meta.id, bytes)
+    this.totalBytes += bytes
+  }
+
+  /** 条目内容变化后增量更新内存预算 */
+  private reaccount(tx: StoredTransaction): void {
+    const previous = this.accountedBytes.get(tx.meta.id)
+    if (previous === undefined) return
+    const next = this.bytesOf(tx)
+    this.accountedBytes.set(tx.meta.id, next)
+    this.totalBytes += next - previous
+  }
+
+  /** 条目移除时从预算中扣除 */
+  private forget(id: string): void {
+    const bytes = this.accountedBytes.get(id)
+    if (bytes === undefined) return
+    this.totalBytes = Math.max(0, this.totalBytes - bytes)
+    this.accountedBytes.delete(id)
   }
 
   async toDetail(tx: StoredTransaction): Promise<EntryDetail> {
@@ -250,6 +324,8 @@ export class SessionStore {
     this.items.clear()
     this.order = []
     this.seq = 0
+    this.totalBytes = 0
+    this.accountedBytes.clear()
     for (const entry of data.entries) {
       if (!entry?.meta?.id || !entry.meta.url) continue
       const meta = { ...entry.meta }
@@ -258,6 +334,8 @@ export class SessionStore {
         meta.note = meta.note || '会话恢复时请求尚未完成'
       }
       this.seq = Math.max(this.seq, meta.seq || 0)
+      const requestBody = entry.requestBodyBase64 ? Buffer.from(entry.requestBodyBase64, 'base64') : null
+      const responseBody = entry.responseBodyBase64 ? Buffer.from(entry.responseBodyBase64, 'base64') : null
       const tx: StoredTransaction = {
         meta,
         requestHeaders: entry.requestHeaders ?? [],
@@ -266,10 +344,12 @@ export class SessionStore {
         responseHeaderSize: meta.responseSize ? Math.max(0, meta.responseSize - (entry.responseBodySize ?? 0)) : 0,
         requestChunks: [],
         responseChunks: [],
-        requestBody: entry.requestBodyBase64 ? Buffer.from(entry.requestBodyBase64, 'base64') : null,
-        responseBody: entry.responseBodyBase64 ? Buffer.from(entry.responseBodyBase64, 'base64') : null,
+        requestBody,
+        responseBody,
         requestBodySize: entry.requestBodySize ?? 0,
         responseBodySize: entry.responseBodySize ?? 0,
+        requestCapturedSize: requestBody?.length ?? 0,
+        responseCapturedSize: responseBody?.length ?? 0,
         requestTruncated: Boolean(entry.requestTruncated),
         responseTruncated: Boolean(entry.responseTruncated),
         requestEncoding: entry.requestEncoding,
@@ -280,13 +360,11 @@ export class SessionStore {
       if (!this.items.has(meta.id)) {
         this.items.set(meta.id, tx)
         this.order.push(meta.id)
+        this.account(tx)
       }
     }
     // 会话导入由主进程整体广播，无需逐条触发事件
-    while (this.order.length > this.maxEntries) {
-      const id = this.order.shift()!
-      this.items.delete(id)
-    }
+    this.enforceLimits(false)
     return this.list()
   }
 }
