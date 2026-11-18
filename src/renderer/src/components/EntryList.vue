@@ -279,10 +279,10 @@ onBeforeUnmount(() => {
       </span>
       <div class="fc-list-topbar-spacer" />
       <div v-if="view === 'structure'" class="fc-list-tools">
-        <button class="fc-list-tool" type="button" title="全部展开" @click="expandAll">
+        <button class="fc-list-tool" type="button" title="全部展开" aria-label="全部展开" @click="expandAll">
           <AppIcon name="expand" :size="13" />
         </button>
-        <button class="fc-list-tool" type="button" title="全部折叠" @click="collapseAll">
+        <button class="fc-list-tool" type="button" title="全部折叠" aria-label="全部折叠" @click="collapseAll">
           <AppIcon name="collapse" :size="13" />
         </button>
       </div>
@@ -305,7 +305,15 @@ onBeforeUnmount(() => {
       <span class="fc-list-header-cell fc-list-align-right">Duration</span>
     </div>
 
-    <div ref="scrollEl" class="fc-list-scroll" tabindex="0" @scroll="onScroll" @keydown="onKeydown">
+    <div
+      ref="scrollEl"
+      class="fc-list-scroll"
+      tabindex="0"
+      :role="view === 'structure' ? 'tree' : 'list'"
+      aria-label="请求列表"
+      @scroll="onScroll"
+      @keydown="onKeydown"
+    >
       <div v-if="entries.length === 0" class="fc-list-empty">
         <div class="fc-list-empty-icon">
           <AppIcon name="globe" :size="24" />
@@ -351,7 +359,12 @@ onBeforeUnmount(() => {
               v-if="row.kind === 'folder'"
               class="fc-folder-row"
               :style="{ paddingLeft: `${10 + row.depth * 14}px` }"
+              role="treeitem"
+              :aria-expanded="!row.collapsed"
+              tabindex="0"
               @click="toggleFolder(row.key)"
+              @keydown.enter.prevent.stop="toggleFolder(row.key)"
+              @keydown.space.prevent.stop="toggleFolder(row.key)"
             >
               <span class="fc-folder-chevron" :class="{ 'fc-folder-chevron--collapsed': row.collapsed }">
                 <AppIcon name="chevron-down" :size="11" />
@@ -370,6 +383,9 @@ onBeforeUnmount(() => {
                 view === 'structure' ? 'fc-entry-row--structure' : 'fc-entry-row--sequence',
                 { 'fc-entry-row--selected': row.entry.id === selectedId, 'fc-entry-row--error': row.entry.state === 'error' }
               ]"
+              :role="view === 'structure' ? 'treeitem' : 'listitem'"
+              :aria-selected="view === 'structure' ? row.entry.id === selectedId : undefined"
+              :aria-current="view === 'sequence' && row.entry.id === selectedId ? 'true' : undefined"
               :data-entry-id="row.entry.id"
               :title="row.entry.url"
               @click="selectRow(row.entry)"

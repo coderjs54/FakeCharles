@@ -191,14 +191,15 @@ async function saveBody(): Promise<void> {
           :class="{ 'fc-body-tool--active': wrap }"
           type="button"
           title="自动换行"
+          aria-label="自动换行"
           @click="wrap = !wrap"
         >
           <AppIcon name="wrap" :size="14" />
         </button>
-        <button class="fc-body-tool" type="button" title="复制内容" :disabled="activeBody.kind !== 'text'" @click="copyBody">
+        <button class="fc-body-tool" type="button" title="复制内容" aria-label="复制内容" :disabled="activeBody.kind !== 'text'" @click="copyBody">
           <AppIcon name="copy" :size="14" />
         </button>
-        <button class="fc-body-tool" type="button" title="保存内容" :disabled="!activeBody.available || saving" @click="saveBody">
+        <button class="fc-body-tool" type="button" title="保存内容" aria-label="保存内容" :disabled="!activeBody.available || saving" @click="saveBody">
           <AppIcon name="download" :size="14" />
         </button>
       </div>

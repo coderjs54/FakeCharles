@@ -137,7 +137,7 @@ http://proxy.company.com:8080
 
 注意事项：
 
-- 根证书私钥只保存在本机 userData 目录，不会发送给渲染进程
+- 根证书私钥只保存在本机 userData 目录，不会发送给渲染进程（POSIX 下文件权限为 0600，Windows 依赖用户配置目录的 ACL）
 - Firefox 使用独立证书存储，需要单独导入根证书
 - 当前 HTTPS 解密强制使用 HTTP/1.1，不支持完整 HTTP/2 / HTTP/3 透传
 - 使用证书固定（certificate pinning）或双向证书（mTLS）的应用可能无法解密

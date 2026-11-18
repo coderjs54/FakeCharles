@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, session, shell } from 'electron'
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { APP_NAME } from '../shared/defaults'
@@ -94,7 +94,7 @@ function createWindow(): BrowserWindow {
     icon: iconPath,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false
@@ -132,6 +132,12 @@ function createWindow(): BrowserWindow {
 async function bootstrap(): Promise<void> {
   app.setName(APP_NAME)
   app.setAppUserModelId('com.fakecharles.app')
+
+  // 渲染进程不需要摄像头、麦克风、地理位置、通知等 Web 权限，统一拒绝
+  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false)
+  })
+  session.defaultSession.setPermissionCheckHandler(() => false)
 
   settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'))
   // 自测环境不弹出系统代理接管确认，避免阻塞自动化流程

@@ -199,7 +199,7 @@ async function save(): Promise<void> {
             <span class="fc-field-label">当前代理地址</span>
             <div class="fc-address-value">
               <code>{{ proxyAddress }}</code>
-              <button class="fc-address-copy" type="button" title="复制代理地址" @click="copyAddress">
+              <button class="fc-address-copy" type="button" title="复制代理地址" aria-label="复制代理地址" @click="copyAddress">
                 <AppIcon name="copy" :size="12" />
               </button>
             </div>

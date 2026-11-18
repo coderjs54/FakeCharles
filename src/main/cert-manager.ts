@@ -226,6 +226,7 @@ export class CertificateAuthority {
     cert.sign(caPrivateKey, forge.md.sha256.create())
 
     const caCertPem = forge.pki.certificateToPem(cert)
+    // 私钥只写入 userData 目录：POSIX 下使用 0600；Windows 依赖用户配置目录继承的 ACL
     writeFileSync(this.caCertPath, caCertPem, { encoding: 'utf8', mode: 0o600 })
     writeFileSync(this.caKeyPath, caKeys.privateKey, { encoding: 'utf8', mode: 0o600 })
 

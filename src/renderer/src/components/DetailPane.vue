@@ -83,13 +83,13 @@ async function repeat(): Promise<void> {
           <span class="fc-detail-url" :title="detail.url" data-testid="detail-url">{{ detail.url }}</span>
           <span class="fc-status-pill" :class="`fc-status-pill--${tone}`">{{ statusFullText(detail) }}</span>
           <div class="fc-detail-actions">
-            <button v-if="canRepeat" class="fc-detail-action" type="button" title="重放请求" @click="repeat">
+            <button v-if="canRepeat" class="fc-detail-action" type="button" title="重放请求" aria-label="重放请求" @click="repeat">
               <AppIcon name="repeat" :size="14" />
             </button>
-            <button class="fc-detail-action" type="button" title="复制 URL" @click="copyUrl">
+            <button class="fc-detail-action" type="button" title="复制 URL" aria-label="复制 URL" @click="copyUrl">
               <AppIcon name="copy" :size="14" />
             </button>
-            <button v-if="canRepeat" class="fc-detail-action" type="button" title="复制为 cURL" @click="copyCurl">
+            <button v-if="canRepeat" class="fc-detail-action" type="button" title="复制为 cURL" aria-label="复制为 cURL" @click="copyCurl">
               <AppIcon name="code" :size="14" />
             </button>
           </div>

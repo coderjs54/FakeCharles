@@ -76,7 +76,7 @@ defineExpose({ focusFilter })
       <span class="fc-record-label">{{ recording ? 'Recording' : 'Paused' }}</span>
     </button>
 
-    <button class="fc-icon-button" type="button" title="清空会话（Ctrl+K）" @click="emit('clear-session')">
+    <button class="fc-icon-button" type="button" title="清空会话（Ctrl+K）" aria-label="清空会话" @click="emit('clear-session')">
       <AppIcon name="trash" :size="15" />
     </button>
 
@@ -87,6 +87,8 @@ defineExpose({ focusFilter })
         class="fc-view-button"
         :class="{ 'fc-view-button--active': view === 'structure' }"
         type="button"
+        role="tab"
+        :aria-selected="view === 'structure'"
         data-testid="view-structure"
         @click="view = 'structure'"
       >
@@ -97,6 +99,8 @@ defineExpose({ focusFilter })
         class="fc-view-button"
         :class="{ 'fc-view-button--active': view === 'sequence' }"
         type="button"
+        role="tab"
+        :aria-selected="view === 'sequence'"
         data-testid="view-sequence"
         @click="view = 'sequence'"
       >
@@ -134,10 +138,11 @@ defineExpose({ focusFilter })
         class="fc-filter-input"
         type="text"
         placeholder="Filter requests — URL, method, status"
+        aria-label="过滤请求"
         spellcheck="false"
         data-testid="filter-input"
       />
-      <button v-if="filter" class="fc-filter-clear" type="button" title="清除过滤" @click="filter = ''">
+      <button v-if="filter" class="fc-filter-clear" type="button" title="清除过滤" aria-label="清除过滤" @click="filter = ''">
         <AppIcon name="x" :size="11" />
       </button>
       <span class="fc-filter-hint">Ctrl F</span>
@@ -145,10 +150,10 @@ defineExpose({ focusFilter })
 
     <div class="fc-toolbar-spacer" />
 
-    <button class="fc-icon-button" type="button" title="新建请求（Ctrl+N）" @click="emit('compose')">
+    <button class="fc-icon-button" type="button" title="新建请求（Ctrl+N）" aria-label="新建请求" @click="emit('compose')">
       <AppIcon name="plus" :size="16" />
     </button>
-    <button class="fc-icon-button" type="button" title="设置（Ctrl+,）" @click="emit('open-settings')">
+    <button class="fc-icon-button" type="button" title="设置（Ctrl+,）" aria-label="设置" @click="emit('open-settings')">
       <AppIcon name="settings" :size="15" />
     </button>
 
@@ -168,6 +173,7 @@ defineExpose({ focusFilter })
       :class="{ 'fc-icon-button--active': !proxyStopped }"
       type="button"
       :title="proxyStopped ? '启动代理' : '停止代理'"
+      :aria-label="proxyStopped ? '启动代理' : '停止代理'"
       @click="onToggleProxy"
     >
       <AppIcon name="power" :size="15" />
