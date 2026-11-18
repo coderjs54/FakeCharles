@@ -12,6 +12,7 @@ export interface TransactionInit {
   clientIp: string
   tunnel?: boolean
   decrypted?: boolean
+  upgrade?: boolean
   note?: string
   repeatOf?: string
   httpVersion?: string
@@ -143,6 +144,7 @@ export class SessionStore {
       responseMime: '',
       tunnel: Boolean(init.tunnel),
       decrypted: Boolean(init.decrypted),
+      upgrade: Boolean(init.upgrade),
       note: init.note,
       repeatOf: init.repeatOf
     }

@@ -36,6 +36,8 @@ export interface EntryMeta {
   tunnel: boolean
   /** 是否为通过本地 CA 解密后的 HTTPS 请求 */
   decrypted?: boolean
+  /** 是否为 WebSocket / Upgrade 连接（仅透传，不解析帧） */
+  upgrade?: boolean
   note?: string
   /** 若为重放请求，指向原请求 id */
   repeatOf?: string

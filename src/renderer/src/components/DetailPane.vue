@@ -34,7 +34,8 @@ const canRepeat = computed(
     Boolean(detail.value) &&
     detail.value!.state !== 'pending' &&
     detail.value!.method !== 'CONNECT' &&
-    !detail.value!.tunnel
+    !detail.value!.tunnel &&
+    !detail.value!.upgrade
 )
 
 const tone = computed(() => (detail.value ? statusTone(detail.value) : 'muted'))

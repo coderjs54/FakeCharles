@@ -25,7 +25,8 @@ const canRepeat = computed(
   () =>
     props.detail.state !== 'pending' &&
     props.detail.method !== 'CONNECT' &&
-    !props.detail.tunnel
+    !props.detail.tunnel &&
+    !props.detail.upgrade
 )
 const waitMs = computed(() => props.detail.timings.waitMs ?? 0)
 const receiveMs = computed(() => props.detail.timings.receiveMs ?? 0)

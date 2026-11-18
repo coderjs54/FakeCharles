@@ -25,6 +25,7 @@ FakeCharles 是一个面向开发调试的 HTTP/HTTPS 抓包工具。它在本�
 - 复制 URL、复制为 cURL、保存请求/响应体
 - 请求重放（含解密后的 HTTPS）、Compose 手动构造请求（支持粘贴 cURL 与 HTTPS 地址）、右键菜单操作
 - 支持通过上游 HTTP / HTTPS 代理转发（企业网络场景）
+- 支持 HTTPS 解密后的 WebSocket / Upgrade 透传（不解析帧）
 - 会话保存/加载（`.fchls`）、HAR 导出
 - 暂停/恢复记录、清空会话、停止/重启代理
 - Windows 下自动接管系统代理，退出或停止代理时恢复原设置；异常退出后下次启动自动恢复
@@ -259,7 +260,7 @@ electron-builder.yml      打包配置
 
 - HTTPS 解密默认关闭，需要生成并信任本地根证书
 - HTTPS 解密当前强制 HTTP/1.1，未完整支持 HTTP/2 / HTTP/3
-- HTTPS WebSocket 升级透传尚未实现
+- WebSocket / Upgrade 仅透传字节流，不解析帧，也不支持 HTTP/2 WebSocket
 - 上游 HTTPS 证书校验使用 Node 的默认 CA 存储；企业私有 CA 或自签名上游需要开启“忽略上游 HTTPS 证书错误”或额外配置 CA
 - 证书固定（certificate pinning）、mTLS、部分移动 App 和独立信任库应用可能无法解密
 - 未实现 Charles 的断点、Rewrite、Map Local/Remote 等高级拦截功能

@@ -96,6 +96,7 @@ export class CaptureProxy {
     }
 
     this.mitmHttpServer = http.createServer((req, res) => this.onDecryptedRequest(req, res))
+    this.mitmHttpServer.on('upgrade', (req, socket, head) => this.onDecryptedUpgrade(req, socket, head))
     this.mitmHttpServer.on('clientError', (_error, socket) => {
       if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n')
     })
@@ -279,6 +280,7 @@ export class CaptureProxy {
     const source = this.store.get(id)
     if (!source) throw new Error('原请求已不存在')
     if (source.meta.state === 'pending') throw new Error('请求尚未完成，暂时无法重放')
+    if (source.meta.upgrade) throw new Error('WebSocket / Upgrade 请求无法重放')
     if (source.meta.tunnel || source.meta.method === 'CONNECT') {
       throw new Error('HTTPS 隧道请求无法重放，请先开启 HTTPS 解密并选择解密后的请求')
     }
@@ -903,6 +905,193 @@ export class CaptureProxy {
     })
   }
 
+  /**
+   * HTTPS 解密后的 WebSocket / Upgrade。
+   * 客户端已经和内嵌 TLS 连接完成握手，这里把 Upgrade 请求转发给真实目标，
+   * 收到 101 后把两侧字节流原样 pipe，不解析帧。
+   */
+  private onDecryptedUpgrade(req: http.IncomingMessage, clientSocket: Duplex, head: Buffer): void {
+    const socket = req.socket as net.Socket
+    const targetInfo = this.mitmTargets.get(socket)
+    if (!targetInfo) {
+      clientSocket.destroy()
+      return
+    }
+
+    const perfStart = performance.now()
+    let target: URL
+    try {
+      target = buildHttpsTarget(targetInfo.host, targetInfo.port, req.url || '/')
+    } catch {
+      clientSocket.destroy()
+      return
+    }
+
+    const targetHost = bareHostname(target.hostname)
+    const tx = this.options.recording
+      ? this.store.create({
+          method: req.method || 'GET',
+          url: target.toString(),
+          host: targetHost,
+          port: Number(target.port || 443),
+          path: `${target.pathname}${target.search}`,
+          protocol: 'https',
+          clientIp: normalizeIp(socket.remoteAddress),
+          decrypted: true,
+          upgrade: true,
+          note: 'WebSocket / Upgrade 连接（HTTPS 解密后透传，不解析帧）'
+        })
+      : null
+    if (tx) {
+      tx.requestHeaders = collectHeaders(req.rawHeaders)
+      tx.requestHeaderSize =
+        rawHeadersSize(req.rawHeaders) + requestLineSize(req.method || 'GET', req.url || '/')
+      tx.requestEncoding = headerValue(req.rawHeaders, 'content-encoding') || undefined
+      tx.meta.requestMime = headerValue(req.rawHeaders, 'content-type')
+      tx.meta.requestSize = tx.requestHeaderSize
+      this.store.commit(tx)
+    }
+
+    const headers = buildUpgradeHeaders(collectHeaders(req.rawHeaders), target)
+    let upstreamReq: http.ClientRequest
+    try {
+      upstreamReq = https.request({
+        protocol: 'https:',
+        hostname: targetHost,
+        port: Number(target.port || 443),
+        method: req.method || 'GET',
+        path: `${target.pathname || '/'}${target.search}`,
+        headers,
+        // 配置了上游代理时仍由 HttpsProxyAgent 先建立 CONNECT 隧道
+        agent: this.upstreamHttpsAgent ?? false,
+        rejectUnauthorized: !this.options.allowInsecureUpstream,
+        servername: net.isIP(targetHost) ? undefined : targetHost,
+        ...(this.options.upstreamCa ? { ca: this.options.upstreamCa } : {})
+      })
+    } catch (error) {
+      const message = friendlyError(error as NodeJS.ErrnoException)
+      if (tx) this.store.finalize(tx, 'error', message)
+      writeSocketError(clientSocket, message)
+      this.hooks.onError(`HTTPS WebSocket 握手失败：${message}`)
+      return
+    }
+
+    let upgraded = false
+    const timer = setTimeout(() => {
+      upstreamReq.destroy(new Error('WebSocket 握手超时'))
+    }, 30_000)
+
+    upstreamReq.on('upgrade', (upstreamRes, upstreamSocket, upstreamHead) => {
+      clearTimeout(timer)
+      upgraded = true
+
+      if (tx) {
+        tx.meta.status = upstreamRes.statusCode ?? 101
+        tx.meta.statusText = upstreamRes.statusMessage || 'Switching Protocols'
+        tx.meta.responseMime = headerValue(upstreamRes.rawHeaders, 'content-type')
+        tx.responseHeaders = collectHeaders(upstreamRes.rawHeaders)
+        tx.responseHeaderSize = rawHeadersSize(upstreamRes.rawHeaders) + statusLineSize(upstreamRes)
+        tx.responseBodySize = 0
+        tx.meta.responseSize = tx.responseHeaderSize
+        tx.httpVersion = `HTTP/${upstreamRes.httpVersion}`
+        tx.timings.firstByteAt = Date.now()
+        tx.timings.waitMs = Math.max(0, Math.round(performance.now() - perfStart))
+        tx.timings.receiveMs = 0
+        this.store.finalize(tx, 'complete')
+      }
+
+      writeRawResponse(
+        clientSocket,
+        upstreamRes.statusCode ?? 101,
+        upstreamRes.statusMessage,
+        upstreamRes.rawHeaders
+      )
+      if (upstreamHead.length) clientSocket.write(upstreamHead)
+      if (head?.length) upstreamSocket.write(head)
+
+      this.sockets.add(upstreamSocket)
+      upstreamSocket.on('close', () => this.sockets.delete(upstreamSocket))
+      upstreamSocket.on('error', () => clientSocket.destroy())
+      clientSocket.on('error', () => upstreamSocket.destroy())
+      clientSocket.on('close', () => upstreamSocket.destroy())
+      upstreamSocket.pipe(clientSocket)
+      clientSocket.pipe(upstreamSocket)
+    })
+
+    upstreamReq.on('response', (upstreamRes) => {
+      // 非 101 响应：按普通 HTTP 响应转发给客户端，并记录状态与响应体
+      clearTimeout(timer)
+      const captureLimit = this.options.maxBodySize
+      let captured = 0
+
+      if (tx) {
+        tx.meta.status = upstreamRes.statusCode
+        tx.meta.statusText = upstreamRes.statusMessage || ''
+        tx.meta.responseMime = headerValue(upstreamRes.rawHeaders, 'content-type')
+        tx.responseEncoding = headerValue(upstreamRes.rawHeaders, 'content-encoding') || undefined
+        tx.responseHeaders = collectHeaders(upstreamRes.rawHeaders)
+        tx.responseHeaderSize = rawHeadersSize(upstreamRes.rawHeaders) + statusLineSize(upstreamRes)
+        tx.responseBodySize = 0
+        tx.meta.responseSize = tx.responseHeaderSize
+        tx.httpVersion = `HTTP/${upstreamRes.httpVersion}`
+        tx.timings.firstByteAt = Date.now()
+        tx.timings.waitMs = Math.max(0, Math.round(performance.now() - perfStart))
+        this.store.touch(tx)
+      }
+
+      writeRawResponse(
+        clientSocket,
+        upstreamRes.statusCode ?? 502,
+        upstreamRes.statusMessage,
+        upstreamRes.rawHeaders
+      )
+      upstreamRes.on('data', (chunk: Buffer) => {
+        if (!tx) return
+        tx.responseBodySize += chunk.length
+        const room = captureLimit - captured
+        if (room > 0) {
+          const slice = chunk.length <= room ? chunk : chunk.subarray(0, room)
+          tx.responseChunks.push(slice)
+          tx.responseCapturedSize += slice.length
+          captured += slice.length
+        }
+        if (chunk.length > room) tx.responseTruncated = true
+        tx.meta.responseSize = tx.responseHeaderSize + tx.responseBodySize
+      })
+      upstreamRes.on('end', () => {
+        if (tx) {
+          tx.timings.receiveMs = Math.max(0, Date.now() - (tx.timings.firstByteAt || Date.now()))
+          this.store.finalize(tx, 'complete')
+        }
+        if (!clientSocket.destroyed) clientSocket.end()
+      })
+      upstreamRes.on('error', (error) => {
+        if (tx) this.store.finalize(tx, 'error', friendlyError(error))
+        if (!clientSocket.destroyed) clientSocket.destroy()
+      })
+      upstreamRes.pipe(clientSocket)
+    })
+
+    upstreamReq.on('error', (error) => {
+      clearTimeout(timer)
+      if (upgraded) return
+      const message = friendlyError(error)
+      if (tx) this.store.finalize(tx, 'error', message)
+      writeSocketError(clientSocket, message)
+      this.hooks.onError(`HTTPS WebSocket 握手失败：${message}`)
+    })
+
+    clientSocket.on('error', () => upstreamReq.destroy())
+    clientSocket.on('close', () => {
+      if (!upgraded) {
+        upstreamReq.destroy()
+        if (tx) this.store.finalize(tx, 'error', '客户端提前断开连接')
+      }
+    })
+
+    upstreamReq.end()
+  }
+
   private onUpgrade(req: http.IncomingMessage, clientSocket: Duplex, head: Buffer): void {
     const rawUrl = req.url || '/'
     let target: URL
@@ -923,6 +1112,7 @@ export class CaptureProxy {
           path: `${target.pathname}${target.search}`,
           protocol: 'http',
           clientIp: normalizeIp(req.socket.remoteAddress),
+          upgrade: true,
           note: 'WebSocket / Upgrade 连接（仅透传，不解析内容）'
         })
       : null
@@ -1074,6 +1264,61 @@ function buildOutgoingHeaders(pairs: HeaderPair[], target: URL): http.OutgoingHt
   }
   headers.host = target.host
   return headers
+}
+
+/** Upgrade 请求需要保留 Connection / Upgrade / Sec-WebSocket-*，只剥掉与单跳代理相关的头 */
+const UPGRADE_STRIP_HEADERS = new Set([
+  'host',
+  'proxy-connection',
+  'proxy-authorization',
+  'expect',
+  'content-length',
+  'transfer-encoding',
+  'te',
+  'trailer',
+  'keep-alive'
+])
+
+function buildUpgradeHeaders(pairs: HeaderPair[], target: URL): http.OutgoingHttpHeaders {
+  const headers: http.OutgoingHttpHeaders = {}
+  for (const [rawName, rawValue] of pairs) {
+    const name = rawName.toLowerCase()
+    if (UPGRADE_STRIP_HEADERS.has(name)) continue
+    const current = headers[name]
+    if (current === undefined) headers[name] = rawValue
+    else if (Array.isArray(current)) current.push(rawValue)
+    else headers[name] = [String(current), rawValue]
+  }
+  headers.host = target.host
+  if (headers.connection === undefined) headers.connection = 'Upgrade'
+  return headers
+}
+
+/** 向裸 socket 写一个完整的 HTTP 响应头（用于 Upgrade / CONNECT 透传） */
+function writeRawResponse(
+  socket: Duplex,
+  statusCode: number,
+  statusMessage: string | undefined,
+  rawHeaders: string[]
+): void {
+  if (socket.destroyed) return
+  const lines = [`HTTP/1.1 ${statusCode} ${statusMessage ?? ''}`.trimEnd()]
+  for (let i = 0; i < rawHeaders.length - 1; i += 2) {
+    lines.push(`${rawHeaders[i]}: ${rawHeaders[i + 1]}`)
+  }
+  socket.write(`${lines.join('\r\n')}\r\n\r\n`)
+}
+
+/** Upgrade 握手失败时向裸 socket 返回 502 */
+function writeSocketError(socket: Duplex, message: string): void {
+  if (socket.destroyed) return
+  const body = `FakeCharles: ${message}`
+  socket.end(
+    `HTTP/1.1 502 Bad Gateway\r\n` +
+      `Content-Type: text/plain; charset=utf-8\r\n` +
+      `Content-Length: ${Buffer.byteLength(body)}\r\n` +
+      `Connection: close\r\n\r\n${body}`
+  )
 }
 
 function pairsFromOutgoingHeaders(headers: http.OutgoingHttpHeaders, target: URL): HeaderPair[] {

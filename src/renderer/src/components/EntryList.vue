@@ -68,7 +68,7 @@ const menuItems = computed<ContextMenuItem[]>(() => {
   if (!entry) return []
   const isTunnel = entry.tunnel || entry.method === 'CONNECT'
   return [
-    { id: 'repeat', label: '重放请求', icon: 'repeat', disabled: isTunnel || entry.state === 'pending' },
+    { id: 'repeat', label: '重放请求', icon: 'repeat', disabled: isTunnel || entry.state === 'pending' || Boolean(entry.upgrade) },
     { id: 'copy-url', label: '复制 URL', icon: 'copy' },
     { id: 'copy-curl', label: '复制为 cURL', icon: 'code', disabled: isTunnel },
     { id: 'copy-body', label: '复制响应体', icon: 'file', disabled: isTunnel || entry.state !== 'complete' },
