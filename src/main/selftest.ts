@@ -41,6 +41,15 @@ const USERS_JSON = {
   ]
 }
 
+/** 尝试把请求体解析为 JSON，失败时回退为原始文本 */
+function parseJsonOrText(text: string): unknown {
+  try {
+    return JSON.parse(text || '{}')
+  } catch {
+    return text
+  }
+}
+
 /** 启动一个仅用于自测的本地 HTTP 目标服务器 */
 function startTargetServer(): Promise<{ server: http.Server; port: number }> {
   const server = http.createServer((req, res) => {
@@ -67,13 +76,7 @@ function startTargetServer(): Promise<{ server: http.Server; port: number }> {
       let body = ''
       req.on('data', (chunk: Buffer) => (body += chunk.toString('utf8')))
       req.on('end', () => {
-        let parsed: unknown = null
-        try {
-          parsed = JSON.parse(body || '{}')
-        } catch {
-          parsed = body
-        }
-        sendJson(200, { ok: true, received: parsed })
+        sendJson(200, { ok: true, received: parseJsonOrText(body) })
       })
       return
     }
@@ -159,18 +162,12 @@ function startHttpsTargetServer(ca: CertificateAuthority): Promise<{ server: htt
     let body = ''
     req.on('data', (chunk: Buffer) => (body += chunk.toString('utf8')))
     req.on('end', () => {
-      let received: unknown = body
-      try {
-        received = JSON.parse(body || '{}')
-      } catch {
-        received = body
-      }
       const response = JSON.stringify(
         {
           secure: true,
           method: req.method,
           url: req.url,
-          received,
+          received: parseJsonOrText(body),
           host: req.headers.host
         },
         null,

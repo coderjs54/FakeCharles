@@ -96,7 +96,7 @@ async function send(): Promise<void> {
 
   // 缺省协议按 http 处理，其余协议直接拒绝
   const normalized = /^[a-z]+:\/\//i.test(payload.url) ? payload.url : `http://${payload.url}`
-  let scheme = ''
+  let scheme: string
   try {
     scheme = new URL(normalized).protocol.replace(':', '').toLowerCase()
   } catch {

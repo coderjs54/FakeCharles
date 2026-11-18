@@ -174,6 +174,13 @@ self signed certificate; if the root CA is installed locally, try running Node.j
 
 > 上游代理地址中的用户名密码会以明文形式保存在本机设置文件中，请仅在受控设备上使用。
 
+## 日志与诊断
+
+主进程会把启动、代理启停、系统代理操作和运行期错误写入 userData 下的 `logs/main.log`；单个文件超过 2 MB 时会轮转为 `main.1.log`。
+
+- **帮助 → 打开日志目录**：直接打开日志所在文件夹
+- **帮助 → 导出诊断信息…**：生成包含版本、系统信息、代理状态、设置和最近日志的文本文件；上游代理地址中的密码会被替换为 `***`
+
 ## 可用命令
 
 | 命令 | 说明 |
@@ -182,6 +189,9 @@ self signed certificate; if the root CA is installed locally, try running Node.j
 | `pnpm build` | 类型检查 + 构建主进程、预加载和渲染进程 |
 | `pnpm start` | 预览已构建的应用 |
 | `pnpm typecheck` | 执行 TypeScript / Vue 类型检查 |
+| `pnpm lint` | 运行 ESLint 静态检查 |
+| `pnpm lint:fix` | 自动修复可修复的 ESLint 问题 |
+| `pnpm format` | 使用 Prettier 格式化代码 |
 | `pnpm test` | 运行 Vitest 单元测试 |
 | `pnpm test:watch` | 以监听模式运行单元测试 |
 | `pnpm selftest` | 构建并运行端到端自测，生成截图与结果文件 |
@@ -216,10 +226,11 @@ GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在以下场景触�
 CI 会在 `windows-latest` 上执行：
 
 1. 使用 pnpm 安装依赖
-2. 类型检查与构建
-3. 运行 Electron 端到端自测
-4. 上传自测报告与截图
-5. 构建 Windows 安装包并上传 artifact
+2. ESLint 静态检查
+3. 类型检查与构建
+4. 运行 Electron 端到端自测
+5. 上传自测报告与截图
+6. 构建 Windows 安装包并上传 artifact
 
 ### 发布新版本
 
@@ -229,6 +240,8 @@ CI 会在 `windows-latest` 上执行：
 git tag v1.0.0
 git push origin v1.0.0
 ```
+
+应用内显示和安装包使用的版本号都由 `package.json` 在构建时注入，无需同步修改其他源码文件。
 
 标签构建通过测试并成功生成安装包后，会自动创建 GitHub Release，并附上：
 
@@ -242,7 +255,7 @@ FakeCharles-Setup-<version>-x64.exe
 
 ```text
 src/
-├─ main/                  Electron 主进程：代理、会话、IPC、系统代理、HTTPS CA
+├─ main/                  Electron 主进程：代理、会话、IPC、系统代理、HTTPS CA、日志
 ├─ preload/               preload 桥接 API
 ├─ renderer/              Vue 3 渲染进程
 │  └─ src/

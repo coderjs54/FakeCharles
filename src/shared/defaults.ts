@@ -18,7 +18,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
 }
 
 export const APP_NAME = 'FakeCharles'
-export const APP_VERSION = '1.0.0'
+// 由构建配置从 package.json 注入，避免版本号维护两份
+export const APP_VERSION = __APP_VERSION__
 
 export const MIN_BODY_LIMIT = 64 * 1024
 export const MAX_BODY_LIMIT = 50 * 1024 * 1024

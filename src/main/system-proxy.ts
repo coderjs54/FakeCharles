@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { SystemProxyState } from '../shared/types'
+import { logError, logInfo } from './logger'
 
 /** Windows「Internet 选项」中的系统代理配置位置 */
 export const INTERNET_SETTINGS_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings'
@@ -188,9 +189,9 @@ export class SystemProxyManager {
       }
 
       this.restoreBackup(backup)
-      console.log('[system-proxy] 已恢复上次异常退出时的系统代理设置')
+      logInfo('已恢复上次异常退出时的系统代理设置')
     } catch (error) {
-      console.error(`[system-proxy] 恢复上次系统代理失败：${friendlyError(error)}`)
+      logError(`恢复上次系统代理失败：${friendlyError(error)}`)
     }
   }
 
@@ -266,7 +267,7 @@ export function notifySystemProxyChange(): boolean {
     )
     return true
   } catch (error) {
-    console.error(`[system-proxy] 通知系统刷新代理失败：${friendlyError(error)}`)
+    logError(`通知系统刷新代理失败：${friendlyError(error)}`)
     return false
   }
 }
@@ -287,7 +288,7 @@ function writeRegistryValue(key: string, name: string, type: string, value: stri
   const normalized = normalizeRegistryValue(type, value)
   const result = runReg(['add', key, '/v', name, '/t', type, '/d', normalized, '/f'])
   if (!result.ok) {
-    console.error(`[system-proxy] 写入 ${name} 失败：${result.output.trim()}`)
+    logError(`写入系统代理项 ${name} 失败：${result.output.trim()}`)
   }
   return result.ok
 }

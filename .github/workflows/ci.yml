@@ -67,6 +67,9 @@ jobs:
       - name: Prepare Electron
         run: pnpm exec electron --version
 
+      - name: Lint
+        run: pnpm lint
+
       - name: Typecheck and build
         run: pnpm build
 

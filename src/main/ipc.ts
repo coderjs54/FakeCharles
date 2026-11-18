@@ -230,7 +230,7 @@ function fileNameFromUrl(url: string, extension: string, side: 'request' | 'resp
     const segments = parsed.pathname.split('/').filter(Boolean)
     name = segments[segments.length - 1] ?? ''
   } catch {
-    name = ''
+    // URL 解析失败时沿用空名称，由下方兜底生成文件名
   }
   name = name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 60)
   if (!name) name = side === 'request' ? 'request-body' : 'response-body'

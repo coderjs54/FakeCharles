@@ -223,7 +223,7 @@ export class CaptureProxy {
       this.hooks.onStatus(this.getStatus())
       this.hooks.onError(message)
       this.hooks.onLifecycle?.()
-      throw new Error(message)
+      throw new Error(message, { cause: error })
     }
 
     this.server = server
@@ -733,18 +733,17 @@ export class CaptureProxy {
     let buffered: Buffer = Buffer.alloc(0)
     let tunnelReady = false
     let failed = false
-    let timer: NodeJS.Timeout | undefined
 
     const fail = (message: string): void => {
       if (failed || tunnelReady) return
       failed = true
-      if (timer) clearTimeout(timer)
+      clearTimeout(timer)
       upstream.destroy()
       if (tx) this.store.finalize(tx, 'error', message)
       if (!clientSocket.destroyed) clientSocket.end('HTTP/1.1 502 Bad Gateway\r\n\r\n')
       this.hooks.onError(`上游代理隧道建立失败：${message}`)
     }
-    timer = setTimeout(() => fail('连接上游代理超时'), 10_000)
+    const timer = setTimeout(() => fail('连接上游代理超时'), 10_000)
 
     upstream.once(event, () => {
       if (failed || tunnelReady) return

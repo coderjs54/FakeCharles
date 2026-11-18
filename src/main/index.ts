@@ -1,11 +1,12 @@
 import { app, BrowserWindow, session, shell } from 'electron'
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { APP_NAME } from '../shared/defaults'
+import { APP_NAME, APP_VERSION } from '../shared/defaults'
 import { IPC, type AppCommand, type SystemProxyState } from '../shared/types'
 import { CertificateAuthority } from './cert-manager'
 import type { MainContext } from './context'
 import { registerIpc } from './ipc'
+import { initLogger, logError, logInfo } from './logger'
 import { installApplicationMenu } from './menu'
 import { CaptureProxy } from './proxy-server'
 import { runSelfTest } from './selftest'
@@ -29,6 +30,10 @@ let store: SessionStore
 let proxy: CaptureProxy
 let systemProxy: SystemProxyManager
 let certificateAuthority: CertificateAuthority
+
+// 兜底记录主进程未捕获异常，用户可通过「帮助 → 导出诊断信息」反馈
+process.on('uncaughtException', (error) => logError('未捕获异常', error))
+process.on('unhandledRejection', (reason) => logError('未处理的 Promise 拒绝', reason))
 
 function broadcast(channel: string, payload?: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -54,14 +59,12 @@ function syncSystemProxy(): SystemProxyState {
   if (IS_SELFTEST) return systemProxy.getStatus()
 
   const state =
-    settings.get().autoSystemProxy &&
-    settings.get().systemProxyPrompted &&
-    proxy.getStatus().running
+    settings.get().autoSystemProxy && settings.get().systemProxyPrompted && proxy.getStatus().running
       ? systemProxy.apply(proxy.getStatus().port)
       : systemProxy.restore()
 
   broadcast(IPC.eventSystemProxy, state)
-  if (state.error) console.error(`[${APP_NAME}] ${state.error}`)
+  if (state.error) logError(state.error)
   return state
 }
 
@@ -133,6 +136,10 @@ async function bootstrap(): Promise<void> {
   app.setName(APP_NAME)
   app.setAppUserModelId('com.fakecharles.app')
 
+  // 日志目录位于 userData 下，自测环境会自动落到 .selftest/user-data/logs
+  initLogger(join(app.getPath('userData'), 'logs'))
+  logInfo(`应用启动 v${APP_VERSION} · Electron ${process.versions.electron} · ${process.platform} ${process.arch}`)
+
   // 渲染进程不需要摄像头、麦克风、地理位置、通知等 Web 权限，统一拒绝
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false)
@@ -162,10 +169,13 @@ async function bootstrap(): Promise<void> {
   proxy = new CaptureProxy(
     store,
     {
-      onStatus: (status) => broadcast(IPC.eventStatus, status),
+      onStatus: (status) => {
+        broadcast(IPC.eventStatus, status)
+        logInfo(status.running ? `代理已启动：${status.host}:${status.port}` : '代理已停止')
+      },
       onError: (message) => {
-        console.error(`[${APP_NAME}] ${message}`)
-        // 把运行期错误同步给界面，避免只写控制台导致用户无从排查
+        logError(message)
+        // 把运行期错误同步给界面，避免只写日志导致用户无从排查
         broadcast(IPC.eventError, message)
       },
       onLifecycle: () => {
@@ -209,7 +219,7 @@ async function bootstrap(): Promise<void> {
           setTimeout(() => app.exit(code), 100)
         })
         .catch((error) => {
-          console.error('[selftest] failed:', error)
+          logError('自测执行失败', error)
           setTimeout(() => app.exit(1), 100)
         })
     })
@@ -218,7 +228,7 @@ async function bootstrap(): Promise<void> {
 
   if (settings.get().autoStartProxy) {
     proxy.start().catch((error: Error) => {
-      console.error(`[${APP_NAME}] auto start proxy failed: ${error.message}`)
+      logError('自动启动代理失败', error)
     })
   }
 }
@@ -233,10 +243,13 @@ if (!gotLock) {
     mainWindow.focus()
   })
 
-  app.whenReady().then(bootstrap).catch((error) => {
-    console.error(error)
-    app.quit()
-  })
+  app
+    .whenReady()
+    .then(bootstrap)
+    .catch((error) => {
+      logError('应用启动失败', error)
+      app.quit()
+    })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -250,5 +263,6 @@ if (!gotLock) {
     // 先恢复系统代理，再关闭本地监听，避免退出后浏览器还指向已关闭的端口
     if (systemProxy) systemProxy.restore()
     if (proxy) void proxy.stop(true)
+    logInfo('应用退出')
   })
 }

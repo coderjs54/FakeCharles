@@ -1,7 +1,70 @@
-import { dialog, Menu } from 'electron'
+import { dialog, Menu, shell } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
+import { writeFileSync } from 'node:fs'
+import { release } from 'node:os'
 import { APP_NAME, APP_VERSION } from '../shared/defaults'
+import type { AppSettings } from '../shared/types'
 import type { MainContext } from './context'
+import { getLogDirectory, readRecentLogs } from './logger'
+
+/** 隐藏上游代理地址中的密码，避免导出诊断时泄漏凭据 */
+function redactSettings(settings: AppSettings): AppSettings {
+  return {
+    ...settings,
+    upstreamProxyUrl: settings.upstreamProxyUrl.replace(/\/\/([^:@/]+):([^@/]+)@/, '//$1:***@')
+  }
+}
+
+/** 导出包含版本、代理状态、设置与最近日志的诊断文本，便于用户反馈问题 */
+async function exportDiagnostics(ctx: MainContext): Promise<void> {
+  const win = ctx.getWindow()
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const saveOptions = {
+    title: '导出诊断信息',
+    defaultPath: `fakecharles-diagnostics-${stamp}.txt`,
+    filters: [{ name: '文本文件', extensions: ['txt'] }]
+  }
+  const result = win ? await dialog.showSaveDialog(win, saveOptions) : await dialog.showSaveDialog(saveOptions)
+  if (result.canceled || !result.filePath) return
+
+  const content = [
+    `${APP_NAME} ${APP_VERSION} 诊断信息`,
+    `导出时间: ${new Date().toISOString()}`,
+    `系统: ${process.platform} ${process.arch} (${release()})`,
+    `Electron: ${process.versions.electron}`,
+    `Chromium: ${process.versions.chrome}`,
+    `Node: ${process.versions.node}`,
+    `日志目录: ${getLogDirectory()}`,
+    '',
+    '== 代理状态 ==',
+    JSON.stringify(ctx.proxy.getStatus(), null, 2),
+    '',
+    '== 当前设置 ==',
+    JSON.stringify(redactSettings(ctx.settings.get()), null, 2),
+    '',
+    '== 最近日志 ==',
+    readRecentLogs() || '(暂无日志)'
+  ].join('\n')
+
+  try {
+    writeFileSync(result.filePath, content, 'utf8')
+  } catch (error) {
+    await dialog.showMessageBox({
+      type: 'error',
+      title: '导出诊断信息',
+      message: '导出失败',
+      detail: error instanceof Error ? error.message : String(error)
+    })
+    return
+  }
+
+  await dialog.showMessageBox({
+    type: 'info',
+    title: '导出诊断信息',
+    message: '诊断信息已导出',
+    detail: result.filePath
+  })
+}
 
 /** 构建与 Charles 类似的桌面菜单 */
 export function installApplicationMenu(ctx: MainContext): void {
@@ -37,7 +100,11 @@ export function installApplicationMenu(ctx: MainContext): void {
       submenu: [
         { label: '清空会话', accelerator: 'CmdOrCtrl+K', click: () => ctx.sendCommand('clear-session') },
         { type: 'separator' },
-        { label: '开始 / 暂停记录', accelerator: 'CmdOrCtrl+Shift+R', click: () => ctx.sendCommand('toggle-recording') },
+        {
+          label: '开始 / 暂停记录',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: () => ctx.sendCommand('toggle-recording')
+        },
         { label: '查找请求', accelerator: 'CmdOrCtrl+F', click: () => ctx.sendCommand('focus-filter') }
       ]
     },
@@ -67,6 +134,19 @@ export function installApplicationMenu(ctx: MainContext): void {
     {
       label: '帮助',
       submenu: [
+        {
+          label: '打开日志目录',
+          click: () => {
+            void shell.openPath(getLogDirectory())
+          }
+        },
+        {
+          label: '导出诊断信息…',
+          click: () => {
+            void exportDiagnostics(ctx)
+          }
+        },
+        { type: 'separator' },
         {
           label: `关于 ${APP_NAME}`,
           click: () => {
