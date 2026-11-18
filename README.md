@@ -23,7 +23,7 @@ FakeCharles 是一个面向开发调试的 HTTP/HTTPS 抓包工具。它在本�
 - gzip / deflate / br 解码，JSON 格式化高亮
 - HTML 沙箱预览、图片预览、二进制 Hex 查看
 - 复制 URL、复制为 cURL、保存请求/响应体
-- 请求重放（含解密后的 HTTPS）、Compose 手动构造请求、右键菜单操作
+- 请求重放（含解密后的 HTTPS）、Compose 手动构造请求（支持粘贴 cURL 与 HTTPS 地址）、右键菜单操作
 - 会话保存/加载（`.fchls`）、HAR 导出
 - 暂停/恢复记录、清空会话、停止/重启代理
 - Windows 下自动接管系统代理，退出或停止代理时恢复原设置；异常退出后下次启动自动恢复

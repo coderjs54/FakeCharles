@@ -285,7 +285,10 @@ export class CaptureProxy {
     } catch {
       throw new Error('URL 格式不正确')
     }
-    if (target.protocol !== 'http:') throw new Error('FakeCharles 仅支持发送 HTTP 请求（不支持 HTTPS）')
+    if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+      throw new Error('仅支持 http / https 请求')
+    }
+    const isHttps = target.protocol === 'https:'
     const method = (payload.method || 'GET').toUpperCase()
     const headerPairs = parseHeaderText(payload.headers)
     const bodyBuffer = payload.body ? Buffer.from(payload.body, 'utf8') : null
@@ -298,12 +301,13 @@ export class CaptureProxy {
     const tx = this.store.create({
       method,
       url: target.toString(),
-      host: target.hostname,
-      port: Number(target.port || 80),
+      host: bareHostname(target.hostname),
+      port: Number(target.port || (isHttps ? 443 : 80)),
       path: `${target.pathname}${target.search}`,
-      protocol: 'http',
+      protocol: isHttps ? 'https' : 'http',
       clientIp: '127.0.0.1',
-      note: 'Compose 手动发送',
+      decrypted: isHttps,
+      note: isHttps ? 'Compose 手动发送（HTTPS）' : 'Compose 手动发送',
       httpVersion: 'HTTP/1.1'
     })
     tx.requestHeaders = pairsFromOutgoingHeaders(headers, target)
@@ -324,7 +328,8 @@ export class CaptureProxy {
       target,
       headers,
       body: bodyBuffer,
-      perfStart: performance.now()
+      perfStart: performance.now(),
+      secure: isHttps
     })
     return tx.meta
   }
