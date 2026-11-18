@@ -323,7 +323,7 @@ onBeforeUnmount(() => {
       <span class="fc-statusbar-spacer" />
       <span class="fc-status-item fc-status-item--muted">HTTP 抓包 · HTTPS 可解密</span>
       <span class="fc-status-divider" />
-      <span class="fc-status-item fc-status-item--muted">FakeCharles 1.0.0</span>
+      <span class="fc-status-item fc-status-item--muted">FakeCharles</span>
     </footer>
 
     <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
