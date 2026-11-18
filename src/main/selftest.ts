@@ -643,6 +643,24 @@ export async function runSelfTest(options: SelfTestOptions): Promise<number> {
       await sleep(250)
     }
 
+    // 主题切换：验证工具栏按钮可切换明暗主题，并在暗色模式下截图表征主界面
+    const themeBefore = (await exec<string>(`document.documentElement.dataset.theme ?? 'light'`)) || 'light'
+    const themeNext = themeBefore === 'dark' ? 'light' : 'dark'
+    await exec(`document.querySelector('[data-testid="theme-toggle"]')?.click()`)
+    const themeSwitched = await waitForSelector(
+      () => exec<boolean>(`document.documentElement.dataset.theme === '${themeNext}'`),
+      2000
+    )
+    check('主题切换', themeSwitched, `${themeBefore} → ${themeNext}`)
+    if (themeSwitched && themeNext === 'dark') {
+      await sleep(250)
+      const darkShot = await window.webContents.capturePage()
+      writeFileSync(join(outDir, 'screenshot-dark.png'), darkShot.toPNG())
+      // 恢复浅色，避免影响后续截图与下一次自测
+      await exec(`document.querySelector('[data-testid="theme-toggle"]')?.click()`)
+      await waitForSelector(() => exec<boolean>(`document.documentElement.dataset.theme === 'light'`), 2000)
+    }
+
     if (loginMeta) {
       await exec(`(() => { const el = document.querySelector('[data-entry-id="${loginMeta.id}"]'); if (el) el.click(); return Boolean(el) })()`)
       await sleep(300)

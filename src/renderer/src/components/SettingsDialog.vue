@@ -606,7 +606,7 @@ async function save(): Promise<void> {
   width: 32px;
   height: 18px;
   border-radius: $radius-pill;
-  background: #d5dbe4;
+  background: $color-switch-track;
   transition: background $transition-fast;
 }
 
@@ -617,7 +617,7 @@ async function save(): Promise<void> {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #fff;
+  background: $color-switch-thumb;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.2);
   transition: transform $transition-fast;
 }
@@ -659,7 +659,7 @@ async function save(): Promise<void> {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #b8c0cc;
+  background: $color-dot-idle;
   flex: none;
 }
 

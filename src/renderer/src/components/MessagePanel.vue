@@ -214,7 +214,7 @@ async function copyRaw(): Promise<void> {
 }
 
 .fc-cookie-row:not(.fc-cookie-row--head):hover {
-  background: #fafbfd;
+  background: $color-surface-raised;
 }
 
 .fc-cookie-name {
@@ -286,7 +286,7 @@ async function copyRaw(): Promise<void> {
 .fc-raw-code {
   margin: 0;
   padding: $spacing-lg $spacing-xl;
-  color: #23303f;
+  color: $color-code-text;
   font-family: $font-mono;
   font-size: 12.5px;
   line-height: 1.62;

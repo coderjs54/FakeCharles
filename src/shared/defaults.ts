@@ -14,7 +14,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   upstreamProxyUrl: '',
   maxBodySize: 5 * 1024 * 1024,
   maxEntries: 3000,
-  recordTunnels: true
+  recordTunnels: true,
+  // 默认保持浅色，用户可通过主界面工具栏的日/月图标切换
+  theme: 'light'
 }
 
 export const APP_NAME = 'FakeCharles'

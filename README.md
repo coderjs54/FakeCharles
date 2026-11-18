@@ -19,6 +19,7 @@ FakeCharles 是一个面向开发调试的 HTTP/HTTPS 抓包工具。它在本�
 - Windows 一键安装根证书；其他平台可打开证书位置手动信任
 - `Structure` 树形视图与 `Sequence` 时序视图
 - URL、方法、状态码文本过滤，以及 HTTPS 请求显示/隐藏开关
+- 浅色 / 暗黑主题切换：工具栏右侧日/月图标一键切换，选择会持久保存
 - 请求详情：Overview、Timing、Headers、Query、Cookies、Body、Raw
 - gzip / deflate / br / zstd 解码，JSON 格式化高亮
 - HTML 沙箱预览、图片预览、二进制 Hex 查看

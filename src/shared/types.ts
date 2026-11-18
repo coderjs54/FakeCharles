@@ -98,6 +98,9 @@ export interface ProxyStatus {
   startedAt?: number
 }
 
+/** 界面主题模式 */
+export type ThemeMode = 'light' | 'dark'
+
 export interface AppSettings {
   proxyPort: number
   autoStartProxy: boolean
@@ -121,6 +124,8 @@ export interface AppSettings {
   maxEntries: number
   /** 是否记录 HTTPS CONNECT 隧道（只显示提示，不抓内容） */
   recordTunnels: boolean
+  /** 界面主题：浅色或暗黑 */
+  theme: ThemeMode
 }
 
 /** Windows 系统代理自动配置状态 */

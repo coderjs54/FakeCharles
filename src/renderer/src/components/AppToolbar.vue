@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useSession } from '../stores/useSession'
 import { useToast } from '../stores/useToast'
+import { errorMessage } from '../utils/error'
 import AppIcon from './AppIcon.vue'
 
 const emit = defineEmits<{
@@ -17,15 +18,28 @@ const {
   stats,
   proxyStatus,
   proxyAddress,
+  settings,
   toggleRecording,
   toggleProxy,
-  toggleHttpsVisible
+  toggleHttpsVisible,
+  updateSettings
 } = useSession()
 const { push } = useToast()
 const filterInput = ref<HTMLInputElement | null>(null)
 
 const proxyStopped = computed(() => !proxyStatus.value.running)
 const recording = computed(() => proxyStatus.value.running && proxyStatus.value.recording)
+// 当前是否为暗黑主题；切换按钮据此显示太阳或月亮图标
+const isDark = computed(() => settings.value?.theme === 'dark')
+
+/** 切换浅色/暗黑主题，主题值会由主进程持久化并广播回渲染进程 */
+async function toggleTheme(): Promise<void> {
+  try {
+    await updateSettings({ theme: isDark.value ? 'light' : 'dark' })
+  } catch (error) {
+    push(errorMessage(error), 'error')
+  }
+}
 
 async function onToggleProxy(): Promise<void> {
   await toggleProxy()
@@ -58,7 +72,7 @@ defineExpose({ focusFilter })
       </div>
       <div class="fc-brand-text">
         <span class="fc-brand-name">FakeCharles</span>
-        <span class="fc-brand-sub">HTTP Proxy Inspector</span>
+        <span class="fc-brand-sub">HTTP(S) Proxy Inspector</span>
       </div>
     </div>
 
@@ -150,6 +164,17 @@ defineExpose({ focusFilter })
 
     <div class="fc-toolbar-spacer" />
 
+    <button
+      class="fc-icon-button"
+      type="button"
+      data-testid="theme-toggle"
+      :title="isDark ? '切换到浅色模式' : '切换到暗黑模式'"
+      :aria-label="isDark ? '切换到浅色模式' : '切换到暗黑模式'"
+      :aria-pressed="isDark"
+      @click="toggleTheme"
+    >
+      <AppIcon :name="isDark ? 'sun' : 'moon'" :size="15" />
+    </button>
     <button class="fc-icon-button" type="button" title="新建请求（Ctrl+N）" aria-label="新建请求" @click="emit('compose')">
       <AppIcon name="plus" :size="16" />
     </button>
@@ -273,7 +298,7 @@ defineExpose({ focusFilter })
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #c3cad4;
+  background: $color-dot-idle;
   transition: background $transition-fast;
 }
 
@@ -285,11 +310,11 @@ defineExpose({ focusFilter })
 
 .fc-record-button--active:hover {
   border-color: rgba(192, 43, 43, 0.35);
-  background: #fce3e3;
+  background: $color-recording-soft;
 }
 
 .fc-record-button--active .fc-record-dot {
-  background: #e5484d;
+  background: $color-recording;
   box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.16);
   animation: fc-record-pulse 1.8s ease-in-out infinite;
 }
@@ -416,7 +441,7 @@ defineExpose({ focusFilter })
   width: 22px;
   height: 12px;
   border-radius: $radius-pill;
-  background: #d5dbe4;
+  background: $color-switch-track;
   transition: background $transition-fast;
 }
 
@@ -427,7 +452,7 @@ defineExpose({ focusFilter })
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #fff;
+  background: $color-switch-thumb;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.2);
   transition: transform $transition-fast;
 }
@@ -444,7 +469,7 @@ defineExpose({ focusFilter })
   position: relative;
   display: flex;
   align-items: center;
-  width: 292px;
+  width: 360px;
   height: 28px;
   margin-left: 4px;
   border: 1px solid $color-border;
@@ -531,7 +556,7 @@ defineExpose({ focusFilter })
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #1a9d63;
+  background: $color-online;
   box-shadow: 0 0 0 3px rgba(26, 157, 99, 0.13);
 }
 
@@ -546,7 +571,7 @@ defineExpose({ focusFilter })
 }
 
 .fc-proxy-chip--stopped .fc-proxy-dot {
-  background: #b8c0cc;
+  background: $color-dot-idle;
   box-shadow: none;
 }
 
@@ -565,17 +590,10 @@ defineExpose({ focusFilter })
   }
 
   .fc-filter {
-    width: 220px;
+    width: 320px;
   }
-}
 
-@media (max-width: 1200px) {
-  .fc-https-filter-label {
-    display: none;
-  }
-}
-
-@media (max-width: 1120px) {
+  /* 收起快捷键提示，把空间让给过滤输入框，避免 placeholder 被截断 */
   .fc-filter-hint {
     display: none;
   }
@@ -586,6 +604,18 @@ defineExpose({ focusFilter })
 
   .fc-filter-clear {
     right: 8px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .fc-https-filter-label {
+    display: none;
+  }
+}
+
+@media (max-width: 1120px) {
+  .fc-filter {
+    width: 290px;
   }
 }
 

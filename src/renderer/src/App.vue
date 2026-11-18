@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { AppCommand, EntryMeta } from '@shared/types'
+import type { AppCommand, EntryMeta, ThemeMode } from '@shared/types'
 import { useSession } from './stores/useSession'
 import { useToast } from './stores/useToast'
 import { errorMessage } from './utils/error'
@@ -44,6 +44,33 @@ const needsSystemProxyConsent = computed(
 watch(needsSystemProxyConsent, (needs) => {
   if (needs) systemProxyPromptOpen.value = true
 })
+
+/** 把主题写到根节点，CSS 变量会随 data-theme 切换 */
+function applyTheme(theme: ThemeMode): void {
+  document.documentElement.dataset.theme = theme
+  try {
+    // 缓存一份主题，下次启动时可在设置异步加载前先应用，避免闪白
+    localStorage.setItem('fakecharles:theme', theme)
+  } catch {
+    // localStorage 不可用时忽略，主题仍会在设置加载后应用
+  }
+}
+
+try {
+  if (localStorage.getItem('fakecharles:theme') === 'dark') {
+    document.documentElement.dataset.theme = 'dark'
+  }
+} catch {
+  // ignore
+}
+
+watch(
+  () => settings.value?.theme,
+  (theme) => {
+    if (theme) applyTheme(theme)
+  },
+  { immediate: true }
+)
 
 async function allowSystemProxy(): Promise<void> {
   systemProxyPromptOpen.value = false
@@ -376,7 +403,7 @@ onBeforeUnmount(() => {
 
 .fc-proxy-alert-button:hover {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.45);
+  background: $color-overlay-soft;
 }
 
 .fc-proxy-alert-button--ghost {
@@ -386,7 +413,7 @@ onBeforeUnmount(() => {
 
 .fc-proxy-alert-button--ghost:hover {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.4);
+  background: $color-overlay-softer;
 }
 
 .fc-workspace {
@@ -474,12 +501,12 @@ onBeforeUnmount(() => {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #1a9d63;
+  background: $color-online;
   box-shadow: 0 0 0 2px rgba(26, 157, 99, 0.13);
 }
 
 .fc-status-proxy--stopped .fc-status-dot {
-  background: #b8c0cc;
+  background: $color-dot-idle;
   box-shadow: none;
 }
 

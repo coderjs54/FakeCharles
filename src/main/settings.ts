@@ -57,7 +57,8 @@ function normalize(input: Partial<AppSettings>): AppSettings {
     upstreamProxyUrl: typeof input.upstreamProxyUrl === 'string' ? input.upstreamProxyUrl.trim() : '',
     maxBodySize: Number.isFinite(bodySize) ? clamp(Math.round(bodySize), MIN_BODY_LIMIT, MAX_BODY_LIMIT) : DEFAULT_SETTINGS.maxBodySize,
     maxEntries: Number.isFinite(maxEntries) ? clamp(Math.round(maxEntries), MIN_ENTRIES, MAX_ENTRIES) : DEFAULT_SETTINGS.maxEntries,
-    recordTunnels: input.recordTunnels !== false
+    recordTunnels: input.recordTunnels !== false,
+    theme: input.theme === 'dark' ? 'dark' : 'light'
   }
 }
 

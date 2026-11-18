@@ -328,7 +328,7 @@ async function saveBody(): Promise<void> {
   margin-right: $spacing-xs;
   padding: 2px;
   border-radius: $radius-xs;
-  background: #eef1f5;
+  background: $color-surface-sunken;
 }
 
 .fc-body-segment-button {
@@ -380,13 +380,13 @@ async function saveBody(): Promise<void> {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  background: #fcfdff;
+  background: $color-surface;
 }
 
 .fc-body-code {
   margin: 0;
   padding: $spacing-lg $spacing-xl;
-  color: #23303f;
+  color: $color-code-text;
   font-family: $font-mono;
   font-size: 12.5px;
   line-height: 1.62;
@@ -402,7 +402,7 @@ async function saveBody(): Promise<void> {
 }
 
 .fc-body-code--hex {
-  color: #33506b;
+  color: $color-code-text-muted;
   font-size: 12px;
   line-height: 1.55;
 }
@@ -434,11 +434,11 @@ async function saveBody(): Promise<void> {
   margin: $spacing-xl auto;
   border: 1px solid $color-border;
   border-radius: $radius-sm;
-  background-color: #fff;
-  background-image: linear-gradient(45deg, #eef1f5 25%, transparent 25%),
-    linear-gradient(-45deg, #eef1f5 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #eef1f5 75%),
-    linear-gradient(-45deg, transparent 75%, #eef1f5 75%);
+  background-color: $color-image-bg;
+  background-image: linear-gradient(45deg, $color-checker 25%, transparent 25%),
+    linear-gradient(-45deg, $color-checker 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, $color-checker 75%),
+    linear-gradient(-45deg, transparent 75%, $color-checker 75%);
   background-size: 14px 14px;
   background-position: 0 0, 0 7px, 7px -7px, -7px 0;
   box-shadow: $shadow-sm;
@@ -478,7 +478,7 @@ async function saveBody(): Promise<void> {
 .fc-body-notice {
   margin: 0 $spacing-xl $spacing-lg;
   padding: 7px 10px;
-  border: 1px solid #f0e2c8;
+  border: 1px solid $color-warning-border;
   border-radius: $radius-sm;
   background: $color-warning-soft;
   color: $color-warning;
@@ -487,7 +487,7 @@ async function saveBody(): Promise<void> {
 }
 
 .fc-body-notice--error {
-  border-color: #f3d2d2;
+  border-color: $color-danger-border;
   background: $color-danger-soft;
   color: $color-danger;
 }

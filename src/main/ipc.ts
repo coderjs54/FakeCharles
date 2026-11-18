@@ -1,4 +1,4 @@
-import { app, clipboard, dialog, ipcMain, shell } from 'electron'
+import { app, clipboard, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AppSettings, ComposePayload, EntryDetail } from '../shared/types'
@@ -84,6 +84,8 @@ export function registerIpc(ctx: MainContext): void {
       patch.systemProxyPrompted = true
     }
     const next = ctx.settings.update(patch)
+    // 同步原生窗口、菜单与控件的明暗外观
+    nativeTheme.themeSource = next.theme
     ctx.store.setMaxEntries(next.maxEntries)
     ctx.proxy.updateOptions({
       port: next.proxyPort,
@@ -104,8 +106,13 @@ export function registerIpc(ctx: MainContext): void {
         // 状态广播中已经包含错误信息
       }
     }
-    // 处理「自动接管系统代理」开关变化；端口变化时也会在这里再次对齐
-    ctx.syncSystemProxy()
+    // 仅在影响系统代理的字段变化时重新应用/恢复，避免切换主题等操作触发注册表写入
+    const systemProxyChanged =
+      previous.autoSystemProxy !== next.autoSystemProxy ||
+      previous.systemProxyPrompted !== next.systemProxyPrompted ||
+      previous.proxyPort !== next.proxyPort ||
+      previous.allowLan !== next.allowLan
+    if (systemProxyChanged) ctx.syncSystemProxy()
     return next
   })
 

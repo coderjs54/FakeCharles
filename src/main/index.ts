@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, shell } from 'electron'
+import { app, BrowserWindow, nativeTheme, session, shell } from 'electron'
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { APP_NAME, APP_VERSION } from '../shared/defaults'
@@ -92,7 +92,8 @@ function createWindow(): BrowserWindow {
     minWidth: 1040,
     minHeight: 640,
     show: false,
-    backgroundColor: '#f4f6f9',
+    // 窗口底色跟随主题，避免暗黑模式下启动瞬间闪白
+    backgroundColor: settings?.get().theme === 'dark' ? '#12161d' : '#f4f6f9',
     title: `${APP_NAME} — HTTP 抓包代理`,
     icon: iconPath,
     webPreferences: {
@@ -147,6 +148,8 @@ async function bootstrap(): Promise<void> {
   session.defaultSession.setPermissionCheckHandler(() => false)
 
   settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'))
+  // 让标题栏、菜单和原生控件跟随应用内主题
+  nativeTheme.themeSource = settings.get().theme
   // 自测环境不弹出系统代理接管确认，避免阻塞自动化流程
   if (IS_SELFTEST && !settings.get().systemProxyPrompted) {
     settings.update({ systemProxyPrompted: true })

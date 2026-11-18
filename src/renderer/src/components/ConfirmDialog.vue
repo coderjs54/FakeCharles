@@ -76,7 +76,7 @@ const emit = defineEmits<{
 }
 
 .fc-button--danger:hover {
-  border-color: #a82424;
-  background: #a82424;
+  border-color: $color-danger-strong;
+  background: $color-danger-strong;
 }
 </style>

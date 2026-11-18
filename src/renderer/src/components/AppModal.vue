@@ -114,7 +114,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: $spacing-xxl;
-  background: rgba(15, 23, 42, 0.36);
+  background: $color-modal-overlay;
   backdrop-filter: blur(2px);
   animation: fc-fade-in 120ms ease-out;
 }

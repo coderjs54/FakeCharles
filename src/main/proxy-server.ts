@@ -143,7 +143,9 @@ export class CaptureProxy {
     ) {
       this.configureUpstreamProxy()
     }
-    if (this.status.port !== this.options.port || this.status.recording !== this.options.recording) {
+    // 运行中时实际监听端口不会立即改变，需等 stop/start 后再同步，避免状态栏显示错误端口
+    const portChanged = !this.status.running && this.status.port !== this.options.port
+    if (portChanged || this.status.recording !== this.options.recording) {
       this.status = { ...this.status, port: this.options.port, recording: this.options.recording }
       this.hooks.onStatus(this.getStatus())
     }

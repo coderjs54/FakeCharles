@@ -576,8 +576,8 @@ onBeforeUnmount(() => {
   gap: 5px;
   height: $row-height;
   padding-right: 10px;
-  border-bottom: 1px solid #f4f6f9;
-  background: #fbfcfe;
+  border-bottom: 1px solid $color-divider;
+  background: $color-surface-raised;
   color: $color-text-secondary;
   font-size: 12.5px;
   font-weight: 550;
@@ -601,7 +601,7 @@ onBeforeUnmount(() => {
 
 .fc-folder-icon {
   display: flex;
-  color: #94a0b0;
+  color: $color-text-tertiary;
 }
 
 .fc-folder-name {
@@ -624,7 +624,7 @@ onBeforeUnmount(() => {
   align-items: center;
   height: $row-height;
   padding: 0 10px;
-  border-bottom: 1px solid #f4f6f9;
+  border-bottom: 1px solid $color-divider;
   background: $color-surface;
   color: $color-text;
   font-size: 12.5px;
@@ -664,7 +664,7 @@ onBeforeUnmount(() => {
 
 .fc-entry-icon {
   display: flex;
-  color: #9aa6b5;
+  color: $color-text-tertiary;
 }
 
 .fc-entry-icon--tunnel {
