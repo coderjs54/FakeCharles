@@ -14,13 +14,14 @@ import SettingsDialog from './components/SettingsDialog.vue'
 import ToastStack from './components/ToastStack.vue'
 
 const session = useSession()
-const { proxyStatus, proxyAddress, stats, filter, systemProxyState } = session
+const { proxyStatus, proxyAddress, stats, filter, settings, systemProxyState } = session
 const { push } = useToast()
 
 const toolbarRef = ref<InstanceType<typeof AppToolbar> | null>(null)
 const settingsOpen = ref(false)
 const composeOpen = ref(false)
 const clearOpen = ref(false)
+const systemProxyPromptOpen = ref(false)
 const listWidth = ref(700)
 const lastProxyError = ref('')
 const lastSystemProxyError = ref('')
@@ -30,6 +31,39 @@ const recordingLabel = computed(() => {
   if (!proxyStatus.value.running) return '未抓包'
   return proxyStatus.value.recording ? '记录中' : '已暂停'
 })
+
+/** 首次在 Windows 上运行且代理已启动时，先询问是否允许接管系统代理 */
+const needsSystemProxyConsent = computed(
+  () =>
+    systemProxyState.value.supported &&
+    Boolean(settings.value?.autoSystemProxy) &&
+    settings.value?.systemProxyPrompted === false &&
+    proxyStatus.value.running
+)
+
+watch(needsSystemProxyConsent, (needs) => {
+  if (needs) systemProxyPromptOpen.value = true
+})
+
+async function allowSystemProxy(): Promise<void> {
+  systemProxyPromptOpen.value = false
+  try {
+    await session.updateSettings({ autoSystemProxy: true, systemProxyPrompted: true })
+    push('已开启系统代理接管', 'success')
+  } catch (error) {
+    push(errorMessage(error), 'error')
+  }
+}
+
+async function declineSystemProxy(): Promise<void> {
+  systemProxyPromptOpen.value = false
+  try {
+    await session.updateSettings({ autoSystemProxy: false, systemProxyPrompted: true })
+    push('已跳过系统代理接管，可稍后在代理设置中开启')
+  } catch (error) {
+    push(errorMessage(error), 'error')
+  }
+}
 
 async function handleCommand(command: AppCommand): Promise<void> {
   switch (command) {
@@ -275,6 +309,15 @@ onBeforeUnmount(() => {
       danger
       @confirm="confirmClear"
       @close="clearOpen = false"
+    />
+    <ConfirmDialog
+      v-if="systemProxyPromptOpen"
+      title="允许接管 Windows 系统代理？"
+      message="开启后 FakeCharles 会自动把系统代理指向本机，浏览器和其他遵循系统代理的程序无需手动配置；停止代理或退出应用时会恢复原设置。你也可以稍后在「代理设置」中修改。"
+      confirm-label="允许接管"
+      cancel-label="暂不接管"
+      @confirm="allowSystemProxy"
+      @close="declineSystemProxy"
     />
     <ToastStack />
   </div>

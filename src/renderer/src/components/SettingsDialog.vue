@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import type { HttpsCaInfo } from '@shared/types'
+import { parseUpstreamProxyUrl } from '@shared/upstream-proxy'
 import { useSession } from '../stores/useSession'
 import { useToast } from '../stores/useToast'
 import { errorMessage } from '../utils/error'
@@ -19,6 +20,8 @@ const form = reactive({
   autoSystemProxy: settings.value?.autoSystemProxy ?? true,
   decryptHttps: settings.value?.decryptHttps ?? false,
   allowInsecureUpstream: settings.value?.allowInsecureUpstream ?? false,
+  upstreamProxyEnabled: settings.value?.upstreamProxyEnabled ?? false,
+  upstreamProxyUrl: settings.value?.upstreamProxyUrl ?? '',
   recordTunnels: settings.value?.recordTunnels ?? true,
   bodyLimitMb: Math.round(((settings.value?.maxBodySize ?? 5 * 1024 * 1024) / 1024 / 1024) * 10) / 10,
   maxEntries: settings.value?.maxEntries ?? 3000
@@ -142,6 +145,13 @@ async function save(): Promise<void> {
     errorText.value = '请先确认已将根证书安装并信任，否则浏览器访问 HTTPS 会报证书错误'
     return
   }
+  if (form.upstreamProxyEnabled) {
+    const parsed = parseUpstreamProxyUrl(form.upstreamProxyUrl)
+    if (parsed.error) {
+      errorText.value = parsed.error
+      return
+    }
+  }
 
   saving.value = true
   try {
@@ -152,6 +162,8 @@ async function save(): Promise<void> {
       autoSystemProxy: form.autoSystemProxy,
       decryptHttps: form.decryptHttps,
       allowInsecureUpstream: form.allowInsecureUpstream,
+      upstreamProxyEnabled: form.upstreamProxyEnabled,
+      upstreamProxyUrl: form.upstreamProxyUrl.trim(),
       recordTunnels: form.recordTunnels,
       maxBodySize: Math.round(bodyLimitMb * 1024 * 1024),
       maxEntries
@@ -200,10 +212,17 @@ async function save(): Promise<void> {
             <span class="fc-switch-desc">开启后绑定 0.0.0.0，手机或其他设备可通过本机 IP 连接代理</span>
           </span>
           <span class="fc-switch">
-            <input v-model="form.allowLan" class="fc-switch-input" type="checkbox" />
+            <input v-model="form.allowLan" class="fc-switch-input" type="checkbox" data-testid="allow-lan" />
             <span class="fc-switch-track"><span class="fc-switch-thumb" /></span>
           </span>
         </label>
+
+        <div v-if="form.allowLan" class="fc-lan-warning" data-testid="lan-warning">
+          <AppIcon name="alert" :size="13" />
+          <span>
+            代理不提供身份认证。开启后局域网内任何设备都可以通过本机代理访问网络，请仅在可信网络中使用。
+          </span>
+        </div>
 
         <label class="fc-switch-row">
           <span class="fc-switch-text">
@@ -220,7 +239,7 @@ async function save(): Promise<void> {
           <span class="fc-switch-text">
             <span class="fc-switch-title">自动设置 Windows 系统代理</span>
             <span class="fc-switch-desc">
-              启动代理时自动接管系统代理，停止代理或退出应用时恢复原设置；浏览器和其他遵循系统代理的程序无需手动配置（仅 Windows）
+              启动代理时自动接管系统代理，停止代理或退出应用时恢复原设置；浏览器和其他遵循系统代理的程序无需手动配置（仅 Windows，首次生效前会请求确认）
             </span>
           </span>
           <span class="fc-switch">
@@ -240,6 +259,43 @@ async function save(): Promise<void> {
           <span class="fc-system-proxy-dot" />
           <span class="fc-system-proxy-text">{{ systemProxyStatusText }}</span>
         </div>
+      </section>
+
+      <section class="fc-settings-section">
+        <h3 class="fc-settings-heading">上游代理</h3>
+
+        <label class="fc-switch-row">
+          <span class="fc-switch-text">
+            <span class="fc-switch-title">通过上游代理转发</span>
+            <span class="fc-switch-desc">
+              企业网络需要先经过公司 HTTP 代理时开启；普通 HTTP、HTTPS 和 CONNECT 隧道都会通过该代理转发
+            </span>
+          </span>
+          <span class="fc-switch">
+            <input
+              v-model="form.upstreamProxyEnabled"
+              class="fc-switch-input"
+              type="checkbox"
+              data-testid="upstream-proxy-enabled"
+            />
+            <span class="fc-switch-track"><span class="fc-switch-thumb" /></span>
+          </span>
+        </label>
+
+        <label v-if="form.upstreamProxyEnabled" class="fc-field">
+          <span class="fc-field-label">上游代理地址</span>
+          <input
+            v-model="form.upstreamProxyUrl"
+            class="fc-input"
+            type="text"
+            placeholder="http://proxy.company.com:8080"
+            spellcheck="false"
+            data-testid="upstream-proxy-url"
+          />
+          <span class="fc-field-hint">
+            支持 http / https，可写成 <code>http://user:pass@host:port</code>；凭据会保存在本机设置文件中
+          </span>
+        </label>
       </section>
 
       <section class="fc-settings-section">
@@ -752,6 +808,25 @@ async function save(): Promise<void> {
 
 .fc-trust-text {
   flex: 1;
+}
+
+.fc-lan-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: $spacing-sm;
+  margin-top: -2px;
+  padding: 8px 10px;
+  border: 1px solid rgba(180, 83, 9, 0.2);
+  border-radius: $radius-sm;
+  background: $color-warning-soft;
+  color: $color-warning;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.fc-lan-warning svg {
+  flex: none;
+  margin-top: 1px;
 }
 
 .fc-settings-tip {

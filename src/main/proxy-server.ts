@@ -5,7 +5,10 @@ import tls from 'node:tls'
 import { performance } from 'node:perf_hooks'
 import os from 'node:os'
 import type { Duplex } from 'node:stream'
+import { HttpProxyAgent } from 'http-proxy-agent'
+import { HttpsProxyAgent } from 'https-proxy-agent'
 import type { ComposePayload, EntryMeta, HeaderPair, HttpsCaInfo, ProxyStatus } from '../shared/types'
+import { parseUpstreamProxyUrl, type UpstreamProxyConfig } from '../shared/upstream-proxy'
 import type { CertificateAuthority } from './cert-manager'
 import type { SessionStore, StoredTransaction } from './session-store'
 
@@ -19,6 +22,8 @@ export interface ProxyOptions {
   decryptHttps: boolean
   /** 是否忽略代理到上游服务器的 TLS 证书错误 */
   allowInsecureUpstream: boolean
+  /** 上游 HTTP 代理地址；为空表示直连 */
+  upstreamProxyUrl?: string
   /** 仅测试使用：额外信任的上游 CA PEM */
   upstreamCa?: string
 }
@@ -69,6 +74,10 @@ export class CaptureProxy {
   private sockets = new Set<Duplex>()
   private readonly mitmHttpServer: http.Server
   private readonly mitmTargets = new WeakMap<net.Socket, { host: string; port: number }>()
+  /** 上游代理连接器；为空表示直连目标服务器 */
+  private upstreamHttpAgent: HttpProxyAgent<string> | null = null
+  private upstreamHttpsAgent: HttpsProxyAgent<string> | null = null
+  private upstreamProxy: UpstreamProxyConfig | undefined
 
   constructor(
     private readonly store: SessionStore,
@@ -77,6 +86,7 @@ export class CaptureProxy {
     private readonly ca?: CertificateAuthority
   ) {
     this.options = { ...options }
+    this.configureUpstreamProxy()
     this.status = {
       running: false,
       host: '127.0.0.1',
@@ -123,10 +133,46 @@ export class CaptureProxy {
   }
 
   updateOptions(patch: Partial<ProxyOptions>): void {
+    const previous = this.options
     this.options = { ...this.options, ...patch }
+    if (
+      (patch.upstreamProxyUrl !== undefined && patch.upstreamProxyUrl !== previous.upstreamProxyUrl) ||
+      (patch.allowInsecureUpstream !== undefined &&
+        patch.allowInsecureUpstream !== previous.allowInsecureUpstream)
+    ) {
+      this.configureUpstreamProxy()
+    }
     if (this.status.port !== this.options.port || this.status.recording !== this.options.recording) {
       this.status = { ...this.status, port: this.options.port, recording: this.options.recording }
       this.hooks.onStatus(this.getStatus())
+    }
+  }
+
+  /** 重新构建上游代理连接器；空地址表示直连目标服务器 */
+  private configureUpstreamProxy(): void {
+    this.upstreamHttpAgent?.destroy()
+    this.upstreamHttpsAgent?.destroy()
+    this.upstreamHttpAgent = null
+    this.upstreamHttpsAgent = null
+    this.upstreamProxy = undefined
+
+    const raw = this.options.upstreamProxyUrl?.trim() ?? ''
+    if (!raw) return
+
+    const result = parseUpstreamProxyUrl(raw)
+    if (!result.config) {
+      this.hooks.onError(`上游代理配置无效：${result.error}`)
+      return
+    }
+    this.upstreamProxy = result.config
+    try {
+      this.upstreamHttpAgent = new HttpProxyAgent(result.config.url)
+      this.upstreamHttpsAgent = new HttpsProxyAgent(result.config.url, {
+        rejectUnauthorized: !this.options.allowInsecureUpstream
+      })
+    } catch (error) {
+      this.upstreamProxy = undefined
+      this.hooks.onError(`上游代理初始化失败：${friendlyError(error as NodeJS.ErrnoException)}`)
     }
   }
 
@@ -140,6 +186,8 @@ export class CaptureProxy {
   async start(portOverride?: number): Promise<ProxyStatus> {
     if (typeof portOverride === 'number' && Number.isFinite(portOverride)) this.options.port = portOverride
     await this.stop(true)
+    // stop 会释放上游代理连接，重新启动时按当前配置重建
+    this.configureUpstreamProxy()
 
     const server = http.createServer((req, res) => this.onRequest(req, res))
     server.on('connect', (req, socket, head) => this.onConnect(req, socket, head))
@@ -213,6 +261,12 @@ export class CaptureProxy {
       }
     }
     this.sockets.clear()
+    // 释放上游代理连接，避免停止后仍持有 socket
+    this.upstreamHttpAgent?.destroy()
+    this.upstreamHttpsAgent?.destroy()
+    this.upstreamHttpAgent = null
+    this.upstreamHttpsAgent = null
+    this.upstreamProxy = undefined
     this.status = { ...this.status, running: false, startedAt: undefined }
     if (!silent) {
       this.hooks.onStatus(this.getStatus())
@@ -432,7 +486,8 @@ export class CaptureProxy {
             method,
             path: `${target.pathname || '/'}${target.search}`,
             headers,
-            agent: false,
+            // 配置了上游代理时由 HttpsProxyAgent 建立 CONNECT 隧道
+            agent: this.upstreamHttpsAgent ?? false,
             rejectUnauthorized: !this.options.allowInsecureUpstream,
             servername: net.isIP(upstreamHost) ? undefined : upstreamHost,
             ...(this.options.upstreamCa ? { ca: this.options.upstreamCa } : {})
@@ -444,7 +499,8 @@ export class CaptureProxy {
             method,
             path: `${target.pathname || '/'}${target.search}`,
             headers,
-            agent: false
+            // 配置了上游代理时由 HttpProxyAgent 改写为绝对形式请求
+            agent: this.upstreamHttpAgent ?? false
           })
     } catch (error) {
       // http.request 会在 Header 非法等情况下同步抛错；这里兜底，避免留下 pending 条目或抛出到全局
@@ -599,6 +655,12 @@ export class CaptureProxy {
         ? this.buildTunnelTransaction(req, target.host, target.port)
         : null
 
+    // 未开启 HTTPS 解密时，CONNECT 隧道也需要经过上游代理
+    if (this.upstreamProxy) {
+      this.connectTunnelViaUpstream(clientSocket, head, target, tx)
+      return
+    }
+
     let settled = false
     const upstream = net.connect(target.port, target.host, () => {
       if (settled) return
@@ -634,6 +696,116 @@ export class CaptureProxy {
       if (tx) this.store.finalize(tx, 'complete')
       if (!clientSocket.destroyed) clientSocket.destroy()
     })
+  }
+
+  /** 打开到上游代理的 TCP/TLS 连接，返回需要等待的连接事件 */
+  private openUpstreamProxySocket(): { socket: net.Socket; event: 'connect' | 'secureConnect' } | null {
+    const proxy = this.upstreamProxy
+    if (!proxy) return null
+    if (proxy.protocol === 'https:') {
+      const socket = tls.connect({
+        host: proxy.host,
+        port: proxy.port,
+        servername: net.isIP(proxy.host) ? undefined : proxy.host,
+        rejectUnauthorized: !this.options.allowInsecureUpstream
+      })
+      return { socket, event: 'secureConnect' }
+    }
+    return { socket: net.connect(proxy.port, proxy.host), event: 'connect' }
+  }
+
+  /**
+   * 通过上游代理建立 CONNECT 隧道。
+   * 代理返回 200 后，把客户端与目标的字节流原样 pipe 起来。
+   */
+  private connectTunnelViaUpstream(
+    clientSocket: Duplex,
+    head: Buffer,
+    target: { host: string; port: number },
+    tx: StoredTransaction | null
+  ): void {
+    const opened = this.openUpstreamProxySocket()
+    if (!opened) return
+    const { socket: upstream, event } = opened
+    const proxy = this.upstreamProxy!
+    let buffered: Buffer = Buffer.alloc(0)
+    let tunnelReady = false
+    let failed = false
+    let timer: NodeJS.Timeout | undefined
+
+    const fail = (message: string): void => {
+      if (failed || tunnelReady) return
+      failed = true
+      if (timer) clearTimeout(timer)
+      upstream.destroy()
+      if (tx) this.store.finalize(tx, 'error', message)
+      if (!clientSocket.destroyed) clientSocket.end('HTTP/1.1 502 Bad Gateway\r\n\r\n')
+      this.hooks.onError(`上游代理隧道建立失败：${message}`)
+    }
+    timer = setTimeout(() => fail('连接上游代理超时'), 10_000)
+
+    upstream.once(event, () => {
+      if (failed || tunnelReady) return
+      const host = net.isIPv6(target.host) ? `[${target.host}]` : target.host
+      const lines = [`CONNECT ${host}:${target.port} HTTP/1.1`, `Host: ${host}:${target.port}`]
+      if (proxy.authorization) lines.push(`Proxy-Authorization: ${proxy.authorization}`)
+      upstream.write(`${lines.join('\r\n')}\r\n\r\n`)
+    })
+
+    const onProxyData = (chunk: Buffer): void => {
+      if (tunnelReady || failed) return
+      buffered = Buffer.concat([buffered, chunk])
+      const headerEnd = buffered.indexOf('\r\n\r\n')
+      if (headerEnd < 0) {
+        if (buffered.length > 64 * 1024) fail('上游代理响应头过长')
+        return
+      }
+
+      const statusLine = buffered.subarray(0, headerEnd).toString('latin1').split('\r\n')[0] ?? ''
+      const match = /^HTTP\/\d(?:\.\d)?\s+(\d{3})/.exec(statusLine)
+      if (!match) {
+        fail('上游代理返回了无法解析的响应')
+        return
+      }
+      const status = Number(match[1])
+      if (status !== 200) {
+        fail(`上游代理拒绝了 CONNECT 请求（HTTP ${status}）`)
+        return
+      }
+
+      tunnelReady = true
+      if (timer) clearTimeout(timer)
+      upstream.off('data', onProxyData)
+      const rest = buffered.subarray(headerEnd + 4)
+
+      if (tx) {
+        tx.meta.status = 200
+        tx.meta.statusText = 'Connection Established'
+        tx.responseHeaders = [
+          ['proxy-agent', 'FakeCharles'],
+          ['upstream-proxy', `${proxy.host}:${proxy.port}`]
+        ]
+        tx.responseHeaderSize = 0
+        tx.meta.responseSize = 0
+        this.store.finalize(tx, 'complete')
+      }
+
+      clientSocket.write('HTTP/1.1 200 Connection Established\r\nProxy-Agent: FakeCharles\r\n\r\n')
+      if (head?.length) upstream.write(head)
+      // 代理响应头之后的数据属于目标服务器，直接转给客户端
+      if (rest.length) clientSocket.write(rest)
+      upstream.pipe(clientSocket)
+      clientSocket.pipe(upstream)
+    }
+
+    upstream.on('data', onProxyData)
+    upstream.on('error', (error) => fail(friendlyError(error as NodeJS.ErrnoException)))
+    upstream.on('close', () => {
+      if (!tunnelReady && !failed) fail('上游代理连接已关闭')
+      else if (!clientSocket.destroyed) clientSocket.destroy()
+    })
+    clientSocket.on('error', () => upstream.destroy())
+    clientSocket.on('close', () => upstream.destroy())
   }
 
   /**
@@ -761,10 +933,35 @@ export class CaptureProxy {
       this.store.commit(tx)
     }
 
-    const upstream = net.connect(Number(target.port || 80), target.hostname, () => {
-      upstream.write(`${req.method} ${target.pathname}${target.search} HTTP/1.1\r\n`)
+    const proxy = this.upstreamProxy
+    const connectHost = proxy ? proxy.host : bareHostname(target.hostname)
+    const connectPort = proxy ? proxy.port : Number(target.port || 80)
+    const connectSecure = proxy?.protocol === 'https:'
+    const upstream = connectSecure
+      ? tls.connect({
+          host: connectHost,
+          port: connectPort,
+          servername: net.isIP(connectHost) ? undefined : connectHost,
+          rejectUnauthorized: !this.options.allowInsecureUpstream
+        })
+      : net.connect(connectPort, connectHost)
+    const connectEvent = connectSecure ? 'secureConnect' : 'connect'
+
+    upstream.once(connectEvent, () => {
+      // 走上游代理时使用绝对形式请求，直连时使用 origin-form
+      const requestTarget = proxy
+        ? `${target.protocol}//${target.host}${target.pathname}${target.search}`
+        : `${target.pathname}${target.search}`
+      upstream.write(`${req.method || 'GET'} ${requestTarget} HTTP/1.1\r\n`)
       for (let i = 0; i < req.rawHeaders.length; i += 2) {
-        upstream.write(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}\r\n`)
+        const name = req.rawHeaders[i]
+        // Proxy-Authorization 只对代理本身有效，不能转发给目标服务器
+        if (name.toLowerCase() === 'proxy-authorization') continue
+        upstream.write(`${name}: ${req.rawHeaders[i + 1]}\r\n`)
+      }
+      if (proxy) {
+        upstream.write('Proxy-Connection: keep-alive\r\n')
+        if (proxy.authorization) upstream.write(`Proxy-Authorization: ${proxy.authorization}\r\n`)
       }
       upstream.write('\r\n')
       if (head?.length) upstream.write(head)

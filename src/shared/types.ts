@@ -103,10 +103,16 @@ export interface AppSettings {
   allowLan: boolean
   /** 启动代理时自动接管 Windows 系统代理，退出时恢复 */
   autoSystemProxy: boolean
+  /** 是否已就「自动接管系统代理」征求过用户同意 */
+  systemProxyPrompted: boolean
   /** 是否启用本地 CA，对 HTTPS 做 TLS 中间人解密 */
   decryptHttps: boolean
   /** 是否忽略代理到上游服务器的 TLS 证书错误（仅调试自签名/内部站点） */
   allowInsecureUpstream: boolean
+  /** 是否通过上游 HTTP 代理转发请求（企业网络场景） */
+  upstreamProxyEnabled: boolean
+  /** 上游代理地址，例如 http://user:pass@proxy.company.com:8080 */
+  upstreamProxyUrl: string
   /** 单个请求/响应体最大捕获字节数 */
   maxBodySize: number
   /** 会话最大保留条目数 */

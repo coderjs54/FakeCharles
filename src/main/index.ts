@@ -54,7 +54,9 @@ function syncSystemProxy(): SystemProxyState {
   if (IS_SELFTEST) return systemProxy.getStatus()
 
   const state =
-    settings.get().autoSystemProxy && proxy.getStatus().running
+    settings.get().autoSystemProxy &&
+    settings.get().systemProxyPrompted &&
+    proxy.getStatus().running
       ? systemProxy.apply(proxy.getStatus().port)
       : systemProxy.restore()
 
@@ -132,6 +134,10 @@ async function bootstrap(): Promise<void> {
   app.setAppUserModelId('com.fakecharles.app')
 
   settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'))
+  // 自测环境不弹出系统代理接管确认，避免阻塞自动化流程
+  if (IS_SELFTEST && !settings.get().systemProxyPrompted) {
+    settings.update({ systemProxyPrompted: true })
+  }
   systemProxy = new SystemProxyManager(join(app.getPath('userData'), 'system-proxy-backup.json'))
   certificateAuthority = new CertificateAuthority(join(app.getPath('userData'), 'https-ca'))
 
@@ -167,7 +173,8 @@ async function bootstrap(): Promise<void> {
       recordTunnels: settings.get().recordTunnels,
       recording: true,
       decryptHttps: settings.get().decryptHttps,
-      allowInsecureUpstream: settings.get().allowInsecureUpstream
+      allowInsecureUpstream: settings.get().allowInsecureUpstream,
+      upstreamProxyUrl: settings.get().upstreamProxyEnabled ? settings.get().upstreamProxyUrl : ''
     },
     certificateAuthority
   )

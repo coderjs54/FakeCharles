@@ -73,9 +73,17 @@ export function registerIpc(ctx: MainContext): void {
     return info
   })
 
-  ipcMain.handle(IPC.settingsUpdate, async (_event, patch: Partial<AppSettings>) => {
+  ipcMain.handle(IPC.settingsUpdate, async (_event, payload: Partial<AppSettings>) => {
     const previous = ctx.settings.get()
-    const next = ctx.settings.update(patch ?? {})
+    const patch: Partial<AppSettings> = { ...(payload ?? {}) }
+    // 在设置页显式改动「自动系统代理」即视为已征求过同意
+    if (
+      patch.autoSystemProxy !== undefined &&
+      patch.autoSystemProxy !== previous.autoSystemProxy
+    ) {
+      patch.systemProxyPrompted = true
+    }
+    const next = ctx.settings.update(patch)
     ctx.store.setMaxEntries(next.maxEntries)
     ctx.proxy.updateOptions({
       port: next.proxyPort,
@@ -83,7 +91,8 @@ export function registerIpc(ctx: MainContext): void {
       maxBodySize: next.maxBodySize,
       recordTunnels: next.recordTunnels,
       decryptHttps: next.decryptHttps,
-      allowInsecureUpstream: next.allowInsecureUpstream
+      allowInsecureUpstream: next.allowInsecureUpstream,
+      upstreamProxyUrl: next.upstreamProxyEnabled ? next.upstreamProxyUrl : ''
     })
     ctx.broadcast(IPC.eventSettings, next)
     const needRestart =
